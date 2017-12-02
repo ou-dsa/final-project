@@ -4,6 +4,7 @@ library(Metrics)
 library(ggplot2)
 library(dummies)
 library(rpart)
+library(ggplot2)
 
 #Evaluation function
 Evaluation = function (y, prob){ 
@@ -127,6 +128,23 @@ Evaluation = function (y, prob){
                "D statistic"= dstat,
                "Log Loss"=lloss))
 }    
+
+#EDA---
+library(lubridate)
+library(plyr)
+x = data.frame(dataset$is_fraud)
+x$date = dataset$datetime
+x$my = floor_date(dataset$datetime, "month")
+x$count = rep(1,nrow(x))
+
+y = ddply(x, "my", summarise, fraud = sum(dataset.is_fraud))
+yy = ddply(x, "my", summarise, transaction = sum(count))
+
+ggplot(data= y, aes(x=my,y=transaction)) +  
+  geom_line(aes(my, transaction), y) +
+  labs(x = "Time",
+       y = "count") +
+  theme(legend.key=element_blank())
 
 #logistic regression
 #data preprocessing for logistic regression
