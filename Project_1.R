@@ -130,20 +130,20 @@ Evaluation = function (y, prob){
 
 #logistic regression
 #data preprocessing for logistic regression
-dataset = data.frame(dataset)
-dataset$id_issuer = as.factor(dataset$id_issuer)
-dataset$amount_group = as.factor(dataset$amount_group)
-dataset$pos_entry_mode = as.factor(dataset$pos_entry_mode)
-dataset$is_upscale = as.factor(dataset$is_upscale)
-dataset$mcc_group = as.factor(dataset$mcc_group)
-dataset$type = as.factor(dataset$type)
-dataset$country_code = as.factor(dataset$country_code)
-dataset$datetime = as.numeric(as.POSIXct(dataset$datetime))
+dataset_agg = data.frame(dataset_agg)
+dataset_agg$id_issuer = as.factor(dataset_agg$id_issuer)
+dataset_agg$amount_group = as.factor(dataset_agg$amount_group)
+dataset_agg$pos_entry_mode = as.factor(dataset_agg$pos_entry_mode)
+dataset_agg$is_upscale = as.factor(dataset_agg$is_upscale)
+dataset_agg$mcc_group = as.factor(dataset_agg$mcc_group)
+dataset_agg$type = as.factor(dataset_agg$type)
+dataset_agg$country_code = as.factor(dataset_agg$country_code)
+dataset_agg$datetime = as.numeric(as.POSIXct(dataset_agg$datetime))
 
 
-fit <- glm(data=dataset, is_fraud ~ ., family="binomial")
+fit <- glm(data=dataset_agg, is_fraud ~ ., family="binomial")
 summary(fit)
-Evaluation(dataset$is_fraud, fit$fitted.values)
+Evaluation(dataset_agg$is_fraud, fit$fitted.values)
 
 #Confusion Matrix and Statistics
 
@@ -178,24 +178,24 @@ Evaluation(dataset_agg$is_fraud, fit$fitted.values)
 
 #elastic net regularized logistic regression model
 #preprocessinf for elastic net
-dataset = data.frame(dataset)
-dataset$id_issuer = as.factor(dataset$id_issuer)
-dataset$amount_group = as.factor(dataset$amount_group)
-dataset$pos_entry_mode = as.factor(dataset$pos_entry_mode)
-dataset$mcc_group = as.factor(dataset$mcc_group)
-dataset$datetime = as.numeric(as.POSIXct(dataset$datetime))
+dataset_agg = data.frame(dataset_agg)
+dataset_agg$id_issuer = as.factor(dataset_agg$id_issuer)
+dataset_agg$amount_group = as.factor(dataset_agg$amount_group)
+dataset_agg$pos_entry_mode = as.factor(dataset_agg$pos_entry_mode)
+dataset_agg$mcc_group = as.factor(dataset_agg$mcc_group)
+dataset_agg$datetime = as.numeric(as.POSIXct(dataset_agg$datetime))
 
-dataset_m = dummy.data.frame(dataset)
-dataset_m = as.matrix(dataset_m)
-dataset_m = apply(dataset_m,2, as.numeric)
+dataset_agg_m = dummy.data.frame(dataset_agg)
+dataset_agg_m = as.matrix(dataset_agg_m)
+dataset_agg_m = apply(dataset_agg_m,2, as.numeric)
 
 #apply caret package to determine lambda
 fitControl <- trainControl(method="repeatedcv",number=10, repeats=5,verboseIter = TRUE)
 enetGrid <- expand.grid(lambda=seq(0,0.001,length=10),
                         alpha = seq(0.1,0.9,length=10))
 
-fit.glmnet <- train(dataset_m[,1:44],
-                    as.factor(dataset_m[,45]),
+fit.glmnet <- train(dataset_agg_m[,1:44],
+                    as.factor(dataset_agg_m[,45]),
                     method="glmnet",
                     trControl=fitControl,
                     tuneGrid=enetGrid)
@@ -205,14 +205,53 @@ plot(fit.glmnet)
 #The final values used for the model were alpha = 0.9 and lambda = 0.0005555556
 #Evaluation
 
-prob = predict(fit.glmnet, dataset_m[,1:44], s= 0.0005555556, type = "prob")[,2] #predicted probability, here for glmnet
-Evaluation(dataset$is_fraud, prob)
+prob = predict(fit.glmnet, dataset_agg_m[,1:44], s= 0.0005555556, type = "prob")[,2] #predicted probability, here for glmnet
+Evaluation(dataset_agg$is_fraud, prob)
 
 #Confusion Matrix and Statistics
 #         Reference
 #Prediction 0     1
 #0        39945  2092
 #1         345   618
+
+# elastic net with aggregated features
+dataset_agg = dataset_agg[c(1,2,3,4,5,6,7,8,9,10,11,12,14,15,16,17,18,19,20,21,22,23,13)]
+dataset_agg = data.frame(dataset_agg)
+dataset_agg$id_issuer = as.factor(dataset_agg$id_issuer)
+dataset_agg$amount_group = as.factor(dataset_agg$amount_group)
+dataset_agg$pos_entry_mode = as.factor(dataset_agg$pos_entry_mode)
+dataset_agg$mcc_group = as.factor(dataset_agg$mcc_group)
+dataset_agg$datetime = as.numeric(as.POSIXct(dataset_agg$datetime))
+
+dataset_agg_m = dummy.data.frame(dataset_agg)
+dataset_agg_m = as.matrix(dataset_agg_m)
+dataset_agg_m = apply(dataset_agg_m,2, as.numeric)
+
+#apply caret package to determine lambda
+fitControl <- trainControl(method="repeatedcv",number=10, repeats=5,verboseIter = TRUE)
+enetGrid <- expand.grid(lambda=seq(0,0.001,length=10),
+                        alpha = seq(0.1,0.9,length=10))
+
+fit.glmnet <- train(dataset_agg_m[,1:54],
+                    as.factor(dataset_agg_m[,55]),
+                    method="glmnet",
+                    trControl=fitControl,
+                    tuneGrid=enetGrid)
+fit.glmnet
+plot(fit.glmnet)
+
+#The final values used for the model were alpha = 0.1888889 and lambda = 0.
+#Evaluation
+
+prob = predict(fit.glmnet, dataset_agg_m[,1:54], s= 0, type = "prob")[,2] #predicted probability, here for glmnet
+Evaluation(dataset_agg$is_fraud, prob)
+
+#Confusion Matrix and Statistics
+
+#          Reference
+#Prediction  0     1
+#0        39879  1829
+#1         411   881
 
 #decision tree--------------
 #data preprocessing for decision tree
@@ -241,7 +280,7 @@ confusionMatrix(pred, dataset$is_fraud)
 # assess the classifier
 prediction.decisiontree = predict(pfit, newdata=dataset, type = "prob")[,2]
 
-Evaluation(dataset_m[,45], prediction.decisiontree)
+Evaluation(dataset_agg_m[,45], prediction.decisiontree)
 
 #Confusion Matrix and Statistics
 
@@ -276,7 +315,7 @@ confusionMatrix(pred_fr, dataset$is_fraud)
 # assess the classifier
 prediction.randomforest = predict(rf_final, newdata=dataset, type = "prob")[,2]
 
-Evaluation(dataset_m[,45], prediction.randomforest)
+Evaluation(dataset_agg_m[,45], prediction.randomforest)
 
 #Confusion Matrix and Statistics--> overfitting
 
@@ -310,7 +349,7 @@ fit_boost<-boosting(is_fraud ~ ., data = dataset, boos = F, mfinal = 100, coefle
 #Evaluation
 prediction.boostedtree = predict(fit_boost, newdata=dataset, type = "prob") 
 prediction.boostedtree = prediction.boostedtree$prob[,2]
-Evaluation(dataset_m[,45], prediction.boostedtree)
+Evaluation(dataset_agg_m[,45], prediction.boostedtree)
 
 #Confusion Matrix and Statistics
 
@@ -334,12 +373,13 @@ svm_Linear <- train(is_fraud ~., data = dataset,
 test_pred <- predict(svm_Linear, newdata = dataset)
 
 #with Non-Linear Kernel (Radial Basis Function)
+dataset_agg$is_fraud = as.factor(dataset_agg$is_fraud)
 grid_radial <- expand.grid(sigma = c(0,0.01, 0.02, 0.025, 0.03, 0.04, 0.05, 0.06, 0.07,0.08, 0.09, 0.1, 0.25, 0.5, 0.75,0.9),
                              C = c(0,0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.5, 2,5))
 
-svm_Radial_Grid <- train(is_fraud ~., data = dataset, 
+svm_Radial_Grid <- train(is_fraud ~., data = dataset_agg, 
                            method = "svmRadial",
-                           trControl=trctrl,
+                           trControl=fitControl,
                            preProcess = c("center", "scale"),
                            tuneGrid = grid_radial,
                            tuneLength = 10)
@@ -347,6 +387,10 @@ svm_Radial_Grid <- train(is_fraud ~., data = dataset,
 
 
 
+library(e1071)
+m   <- svm(is_fraud ~., data = dataset_agg)
+new <- predict(m, dataset_agg)
+Evaluation(dataset_agg_m[,45], new)
 
 
 
