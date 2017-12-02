@@ -168,6 +168,12 @@ dataset_agg$datetime = as.numeric(as.POSIXct(dataset_agg$datetime))
 fit <- glm(data=dataset_agg, is_fraud ~ ., family="binomial")
 summary(fit)
 Evaluation(dataset_agg$is_fraud, fit$fitted.values)
+#Confusion Matrix and Statistics
+
+#            Reference
+#Prediction  0     1
+#0          39907  1761
+#1           383   949
 
 
 #elastic net regularized logistic regression model
