@@ -328,8 +328,9 @@ svm_Linear <- train(is_fraud ~., data = dataset,
                     method = "svmLinear",
                     trControl=fitControl,
                     preProcess = c("center", "scale"),
+                    tuneGrid = grid,
                     tuneLength = 10)
-tuneGrid = grid
+
 test_pred <- predict(svm_Linear, newdata = dataset)
 
 #with Non-Linear Kernel (Radial Basis Function)
