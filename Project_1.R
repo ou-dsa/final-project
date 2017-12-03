@@ -5,6 +5,10 @@ library(ggplot2)
 library(dummies)
 library(rpart)
 library(ggplot2)
+library(scales)
+library(reshape2)
+library(lubridate)
+library(plyr)
 
 #Evaluation function
 Evaluation = function (y, prob){ 
@@ -130,21 +134,31 @@ Evaluation = function (y, prob){
 }    
 
 #EDA---
-library(lubridate)
-library(plyr)
+
 x = data.frame(dataset$is_fraud)
 x$date = dataset$datetime
 x$my = floor_date(dataset$datetime, "month")
 x$count = rep(1,nrow(x))
 
-y = ddply(x, "my", summarise, fraud = sum(dataset.is_fraud))
-yy = ddply(x, "my", summarise, transaction = sum(count))
+y = ddply(x, "my", summarise, Fraudalent_Transactions = sum(dataset.is_fraud))
+yy = ddply(x, "my", summarise, Total_Transactions = sum(count))
+y$Total_Transactions = yy$Total_Transactions
 
-ggplot(data= y, aes(x=my,y=transaction)) +  
-  geom_line(aes(my, transaction), y) +
+y2 = melt(y, id.vars = 1)
+
+p = ggplot() +  
+  geom_line(aes(my, Fraudalent_Transactions, colour = "Fraudolent Transactions"), y ) +
+  geom_line(data =yy, aes(my, Total_Transactions, colour = "Total Transactions")) +
   labs(x = "Time",
-       y = "count") +
-  theme(legend.key=element_blank())
+       y = "Transactions") +
+  theme(legend.key=element_blank())+
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x)))+
+  scale_color_manual(values=c("red", "black"))
+
+p$labels$colour <- "Legend"
+p
+
 
 #logistic regression
 #data preprocessing for logistic regression
