@@ -147,7 +147,7 @@ y$Total_Transactions = yy$Total_Transactions
 y2 = melt(y, id.vars = 1)
 
 p = ggplot() +  
-  geom_line(aes(my, Fraudalent_Transactions, colour = "Fraudolent Transactions"), y ) +
+  geom_line(aes(my, Fraudalent_Transactions, colour = "Fraudulent Transactions"), y ) +
   geom_line(data =yy, aes(my, Total_Transactions, colour = "Total Transactions")) +
   labs(x = "Time",
        y = "Transactions") +
@@ -159,21 +159,48 @@ p = ggplot() +
 p$labels$colour <- "Legend"
 p
 
+dataset$is_fraud = as.factor(dataset$is_fraud)
+#dataset$amount = log(dataset$amount)
+ggplot(dataset, aes(x = is_fraud, y = amount, group = is_fraud)) + geom_boxplot() +
+  labs(x = "Predictor Variables", title = "Glass Data")
+
+#split dataset
+require(caTools)
+sample = sample.split(dataset_agg$is_fraud, SplitRatio = .7)
+train = subset(dataset_agg, sample == TRUE)
+test  = subset(dataset_agg, sample == FALSE)
 
 #logistic regression
 #data preprocessing for logistic regression
-dataset_agg = data.frame(dataset_agg)
-dataset_agg$id_issuer = as.factor(dataset_agg$id_issuer)
-dataset_agg$amount_group = as.factor(dataset_agg$amount_group)
-dataset_agg$pos_entry_mode = as.factor(dataset_agg$pos_entry_mode)
-dataset_agg$is_upscale = as.factor(dataset_agg$is_upscale)
-dataset_agg$mcc_group = as.factor(dataset_agg$mcc_group)
-dataset_agg$type = as.factor(dataset_agg$type)
-dataset_agg$country_code = as.factor(dataset_agg$country_code)
-dataset_agg$datetime = as.numeric(as.POSIXct(dataset_agg$datetime))
+train = data.frame(train)
+train$id_issuer = as.factor(train$id_issuer)
+train$amount_group = as.factor(train$amount_group)
+train$pos_entry_mode = as.factor(train$pos_entry_mode)
+train$is_upscale = as.factor(train$is_upscale)
+train$mcc_group = as.factor(train$mcc_group)
+train$type = as.factor(train$type)
+train$country_code = as.factor(train$country_code)
+train$datetime = as.numeric(as.POSIXct(train$datetime))
+train$is_fraud = as.factor(train$is_fraud)
 
+test = data.frame(test)
+test$id_issuer = as.factor(test$id_issuer)
+test$amount_group = as.factor(test$amount_group)
+test$pos_entry_mode = as.factor(test$pos_entry_mode)
+test$is_upscale = as.factor(test$is_upscale)
+test$mcc_group = as.factor(test$mcc_group)
+test$type = as.factor(test$type)
+test$country_code = as.factor(test$country_code)
+test$datetime = as.numeric(as.POSIXct(test$datetime))
+test$is_fraud = as.factor(test$is_fraud)
 
-fit <- glm(data=dataset_agg, is_fraud ~ ., family="binomial")
+fitControl <- trainControl(method="repeatedcv",number=10, repeats=5,verboseIter = TRUE)
+fit.glm <- train(is_fraud~.,data=train,
+                    method="glm",
+                    trControl=fitControl)
+fit.glm
+plot(fit.glm)
+#predict function
 summary(fit)
 Evaluation(dataset_agg$is_fraud, fit$fitted.values)
 
@@ -184,28 +211,7 @@ Evaluation(dataset_agg$is_fraud, fit$fitted.values)
 #0            39915  2005
 #1             375   705
 
-#logistic regression with aggregated features
-#data preprocessing for logistic regression
-dataset_agg = data.frame(dataset_agg)
-dataset_agg$id_issuer = as.factor(dataset_agg$id_issuer)
-dataset_agg$amount_group = as.factor(dataset_agg$amount_group)
-dataset_agg$pos_entry_mode = as.factor(dataset_agg$pos_entry_mode)
-dataset_agg$is_upscale = as.factor(dataset_agg$is_upscale)
-dataset_agg$mcc_group = as.factor(dataset_agg$mcc_group)
-dataset_agg$type = as.factor(dataset_agg$type)
-dataset_agg$country_code = as.factor(dataset_agg$country_code)
-dataset_agg$datetime = as.numeric(as.POSIXct(dataset_agg$datetime))
 
-
-fit <- glm(data=dataset_agg, is_fraud ~ ., family="binomial")
-summary(fit)
-Evaluation(dataset_agg$is_fraud, fit$fitted.values)
-#Confusion Matrix and Statistics
-
-#            Reference
-#Prediction  0     1
-#0          39907  1761
-#1           383   949
 
 
 #elastic net regularized logistic regression model
