@@ -166,11 +166,12 @@ ggplot(dataset, aes(x = is_fraud, y = amount, group = is_fraud)) + geom_boxplot(
 
 #split dataset
 require(caTools)
+set.seed(5)
 sample = sample.split(dataset_agg$is_fraud, SplitRatio = .7)
 train = subset(dataset_agg, sample == TRUE)
 test  = subset(dataset_agg, sample == FALSE)
 
-#logistic regression
+
 #data preprocessing for logistic regression
 train = data.frame(train)
 train$id_issuer = as.factor(train$id_issuer)
@@ -179,7 +180,6 @@ train$pos_entry_mode = as.factor(train$pos_entry_mode)
 train$is_upscale = as.factor(train$is_upscale)
 train$mcc_group = as.factor(train$mcc_group)
 train$type = as.factor(train$type)
-train$country_code = as.factor(train$country_code)
 train$datetime = as.numeric(as.POSIXct(train$datetime))
 train$is_fraud = as.factor(train$is_fraud)
 
@@ -190,28 +190,33 @@ test$pos_entry_mode = as.factor(test$pos_entry_mode)
 test$is_upscale = as.factor(test$is_upscale)
 test$mcc_group = as.factor(test$mcc_group)
 test$type = as.factor(test$type)
-test$country_code = as.factor(test$country_code)
 test$datetime = as.numeric(as.POSIXct(test$datetime))
 test$is_fraud = as.factor(test$is_fraud)
 
+#logistic regression
 fitControl <- trainControl(method="repeatedcv",number=10, repeats=5,verboseIter = TRUE)
 fit.glm <- train(is_fraud~.,data=train,
                     method="glm",
                     trControl=fitControl)
 fit.glm
-plot(fit.glm)
-#predict function
-summary(fit)
-Evaluation(dataset_agg$is_fraud, fit$fitted.values)
+summary(fit.glm)
+# Best model
+#Accuracy   Kappa    
+#0.9868371  0.6566835
 
+#predict 
+test.glm = predict(fit.glm, test, type = "prob")
+Evaluation(as.numeric(as.character(test$is_fraud)), test.glm[,2])
+confusionMatrix(predict(fit.glm, test), as.numeric(as.character(test$is_fraud)), positive="1")
 #Confusion Matrix and Statistics
 
-#             Reference
-#Prediction     0     1
-#0            39915  2005
-#1             375   705
+#          Reference
+#Prediction  0      1
+#0        152826   1592
+#1          433   2063
 
-
+lloss = logLoss(as.numeric(as.character(test$is_fraud)),test.glm[,2])
+#logLoss: 0.04344235
 
 
 #elastic net regularized logistic regression model
@@ -293,18 +298,8 @@ Evaluation(dataset_agg$is_fraud, prob)
 
 #decision tree--------------
 #data preprocessing for decision tree
-dataset = data.frame(dataset)
-dataset$id_issuer = as.factor(dataset$id_issuer)
-dataset$amount_group = as.factor(dataset$amount_group)
-dataset$pos_entry_mode = as.factor(dataset$pos_entry_mode)
-dataset$is_upscale = as.factor(dataset$is_upscale)
-dataset$mcc_group = as.factor(dataset$mcc_group)
-dataset$type = as.factor(dataset$type)
-dataset$country_code = as.factor(dataset$country_code)
-dataset$datetime = as.numeric(as.POSIXct(dataset$datetime))
-dataset$is_fraud = as.factor(dataset$is_fraud)
 
-tree.1 <- rpart(data=dataset, is_fraud~.,control=rpart.control(cp=0.0001))
+tree.1 <- rpart(data=train, is_fraud~.,control=rpart.control(cp=0.0001))
 printcp(tree.1)
 plotcp(tree.1)
 
@@ -312,20 +307,19 @@ plotcp(tree.1)
 # (which produces a tree with 202 leaf nodes)--> overfitting?
 pfit<-prune(tree.1,cp=0.00058)
 
-pred = predict(pfit, type="class")
-confusionMatrix(pred, dataset$is_fraud)
+pred = predict(pfit,test, type="prob")[,2]
+confusionMatrix(predict(pfit,test, type = "class"), as.numeric(as.character(test$is_fraud)), positive="1")
 
 # assess the classifier
-prediction.decisiontree = predict(pfit, newdata=dataset, type = "prob")[,2]
-
-Evaluation(dataset_agg_m[,45], prediction.decisiontree)
-
 #Confusion Matrix and Statistics
 
-#          Reference
-#Prediction 0     1
-#0        40030  1059
-#1         260  1651
+#              Reference
+#Prediction      0      1
+#0 152866   1427
+#1    393   2228
+lloss = logLoss(as.numeric(as.character(test$is_fraud)),pred)
+
+Evaluation(as.numeric(as.character(test$is_fraud)), pred)
 
 #random forest-----------------
 
@@ -333,7 +327,7 @@ tuneGrid = expand.grid(.mtry = c(1:12))
 
 fitControl <- trainControl(method="repeatedcv",number=10, repeats=5, verboseIter = TRUE)
 
-rf_model<-train(is_fraud~.,data=dataset,
+rf_model<-train(is_fraud~.,data=train,
                 method="rf",
                 trControl=fitControl,
                 tuneGrid = tuneGrid,
