@@ -336,9 +336,8 @@ rf_model<-train(is_fraud~.,data=train,
 plot(rf_model)
 
 
-#now build single model with ntree = 1500 and with optimal mtry = 12
-dataset$country_code = as.numeric(dataset$country_code)
-rf_final <- randomForest(is_fraud ~ ., data = dataset, ntrees=1500, mtry=12)
+#now build single model with ntree = 1500 and with optimal mtry = 13
+rf_final <- randomForest(is_fraud ~ ., data = train, ntrees=1500, mtry=13)
 
 
 pred_fr = predict(rf_final, type="class")
