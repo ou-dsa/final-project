@@ -60,6 +60,7 @@ train$type = as.factor(train$type)
 train$datetime = as.numeric(as.POSIXct(train$datetime))
 train$is_fraud = as.factor(train$is_fraud)
 levels(train$is_fraud) <- c("no_fraud", "fraud")
+#delete fraud id issuer
 
 test = data.frame(test)
 test$id_issuer = as.factor(test$id_issuer)
@@ -95,15 +96,17 @@ summary(fit.glm_1)
 test.glm = predict(fit.glm_1, test)
 test.glm = as.numeric(test.glm)-1
 pred = prediction(as.numeric(test.glm)-1, as.numeric(test$is_fraud)-1)
-performance(pred, "auc")
-#0.7808035
 
-test.glm = predict(fit.glm_1, test, type = "prob")
-lloss = logLoss(as.numeric(test$is_fraud)-1,test.glm[,2])
-#logLoss: 0.04344235
+perf1 = performance(pred, "prec", "rec")
+plot(perf1)
+#0.7808035war
 
 
+ComputeSavings(test$amount, as.numeric(test.glm)-1, as.numeric(test$is_fraud)-1)
+#413512.3 dollars
 
+#ComputeSavings(test$amount, as.numeric(test$is_fraud)-1, as.numeric(test$is_fraud)-1)
+#561712.9
 
 #decision tree--------------
 #data preprocessing for decision tree
@@ -204,17 +207,17 @@ ComputeSavings <- function(amounts, pred.values, true.values) {
   
   costs <- 0
   for (i in 1:nrow(predictions)) {
-    pred.value <- predictions$pred.values[i, ]
-    true.value <- predictions$true.values[i, ]
+    pred.value <- predictions$pred.values[i]
+    true.value <- predictions$true.values[i]
     
     if (pred.value == 1) {
       costs <- costs + 20
-    } else if (pred.values == 0 & true.value == 1) {
-      costs <- costs + predictions$amount[i, ]
+    } else if (pred.value == 0 & true.value == 1) {
+      costs <- costs + predictions$amount[i]
     }
   }
   
-  savings <- sum(predictions$amounts[predictions$true.values == 1, ]) - costs
+  savings <- sum(predictions$amounts[predictions$true.values == 1]) - costs
   
   return(savings)
 }
