@@ -198,3 +198,23 @@ Evaluation(dataset_agg_m[,45], prediction.boostedtree)
 #0         39837  1725
 #1          453   985
 
+
+ComputeSavings <- function(amounts, pred.values, true.values) {
+  predictions <- data.frame(amounts, pred.values, true.values)
+  
+  costs <- 0
+  for (i in 1:nrow(predictions)) {
+    pred.value <- predictions$pred.values[i, ]
+    true.value <- predictions$true.values[i, ]
+    
+    if (pred.value == 1) {
+      costs <- costs + 20
+    } else if (pred.values == 0 & true.value == 1) {
+      costs <- costs + predictions$amount[i, ]
+    }
+  }
+  
+  savings <- sum(predictions$amounts[predictions$true.values == 1, ]) - costs
+  
+  return(savings)
+}
