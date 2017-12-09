@@ -202,8 +202,10 @@ test  = subset(dataset_agg, sample == FALSE)
 
 #data preprocessing for XGBoost
 train = data.frame(train)
-train = subset(train, select = -c(id_issuer))
-train = train[,c(1,2,3,4,5,6,7,8,9,10,11,22,13,14,15,16,17,18,19,20,21,12)]
+is_fraud = as.factor(train$is_fraud)
+levels(is_fraud) <- c("no_fraud", "fraud")
+
+train = subset(train, select = -c(id_issuer, is_fraud))
 train$amount_group = as.numeric(as.factor(train$amount_group))
 train$pos_entry_mode = as.numeric(as.factor(train$pos_entry_mode))
 train$is_upscale = as.numeric(as.factor(train$is_upscale))
@@ -211,10 +213,6 @@ train$mcc_group = as.numeric(as.factor(train$mcc_group))
 train$type = as.factor(train$type)
 train$type = as.numeric(train$type)-1
 train$datetime = as.numeric(as.POSIXct(train$datetime))
-
-is_fraud = as.factor(train$is_fraud)
-levels(is_fraud) <- c("no_fraud", "fraud")
-
 
 train_m = as.matrix(train)
 train_m = as(train_m, "dgCMatrix")
@@ -236,22 +234,22 @@ test_m = as(test_m, "dgCMatrix")
 
 
 tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
-                       max_depth = c(7,20),       # Max Tree Depth
+                       max_depth = 20,       # Max Tree Depth
                        eta = 0.3,      # Shrinkage
                        gamma = 0.2,                 # Minimum Loss Reduction
-                       colsample_bytree = c(0.5,1),      # Subsample Ratio of Columns
+                       colsample_bytree = 0.5,      # Subsample Ratio of Columns
                        min_child_weight = 8,      # Minimum Sum of Instance Weight
-                       subsample = c(0.5, 1))                # Subsample Percentage             
+                       subsample = 1)                # Subsample Percentage             
 
 fitControl <- trainControl(method="repeatedcv",
-                           number=2, 
-                           repeats=1,
+                           number=10, 
+                           repeats=5,
                            verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary,
                            allowParallel = TRUE)
 
-xgboost_1<-train(x = train_m[,-22],
+xgboost_1<-train(x = train_m,
                 y = is_fraud,
                 method="xgbTree",
                 trControl=fitControl,
