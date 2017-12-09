@@ -2,13 +2,18 @@ library(caret)
 library(ROCR)
 library(Metrics)
 library(ggplot2)
-library(dummies)
 library(rpart)
 library(ggplot2)
 library(scales)
 library(reshape2)
 library(lubridate)
 library(plyr)
+library(irr)
+library(caTools)
+library(magrittr)
+library(dplyr)
+library(dummies)
+library(Matrix)
 
 #EDA---
 
@@ -42,7 +47,6 @@ ggplot(dataset, aes(x = is_fraud, y = amount, group = is_fraud)) + geom_boxplot(
   labs(x = "Predictor Variables", title = "Glass Data")
 
 #split dataset
-require(caTools)
 set.seed(5)
 sample = sample.split(dataset_agg$is_fraud, SplitRatio = .7)
 train = subset(dataset_agg, sample == TRUE)
@@ -51,7 +55,6 @@ test  = subset(dataset_agg, sample == FALSE)
 
 #data preprocessing for logistic regression
 train = data.frame(train)
-train$id_issuer = as.factor(train$id_issuer)
 train$amount_group = as.factor(train$amount_group)
 train$pos_entry_mode = as.factor(train$pos_entry_mode)
 train$is_upscale = as.factor(train$is_upscale)
@@ -60,10 +63,9 @@ train$type = as.factor(train$type)
 train$datetime = as.numeric(as.POSIXct(train$datetime))
 train$is_fraud = as.factor(train$is_fraud)
 levels(train$is_fraud) <- c("no_fraud", "fraud")
-#delete fraud id issuer
+train = subset(train, select = -c(id_issuer))
 
 test = data.frame(test)
-test$id_issuer = as.factor(test$id_issuer)
 test$amount_group = as.factor(test$amount_group)
 test$pos_entry_mode = as.factor(test$pos_entry_mode)
 test$is_upscale = as.factor(test$is_upscale)
@@ -72,11 +74,12 @@ test$type = as.factor(test$type)
 test$datetime = as.numeric(as.POSIXct(test$datetime))
 test$is_fraud = as.factor(test$is_fraud)
 levels(test$is_fraud) <- c("no_fraud", "fraud")
+test = subset(test, select = -c(id_issuer))
 
 #logistic regression
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
-                           repeats=1,
+                           repeats=5,
                            verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
@@ -94,114 +97,185 @@ summary(fit.glm_1)
 #predict and performance measure
 
 test.glm = predict(fit.glm_1, test)
+
 test.glm = as.numeric(test.glm)-1
-pred = prediction(as.numeric(test.glm)-1, as.numeric(test$is_fraud)-1)
+pred.glm = prediction(test.glm, as.numeric(test$is_fraud)-1)
+performance(pred.glm, "auc")
+#0.7812106 Area under the ROC curve
 
-perf1 = performance(pred, "prec", "rec")
-plot(perf1)
-#0.7808035war
+glm.frame = data.frame(test.glm)
+glm.frame$true = as.numeric(test$is_fraud)-1
+kappa2(glm.frame)
+#Kappa = 0.664
+
+ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
+#412802.6 dollars glm
+
+ComputeSavings(test$amount, as.numeric(test$is_fraud)-1, as.numeric(test$is_fraud)-1)
+#561712.9 theoretical max savings
 
 
-ComputeSavings(test$amount, as.numeric(test.glm)-1, as.numeric(test$is_fraud)-1)
-#413512.3 dollars
 
-#ComputeSavings(test$amount, as.numeric(test$is_fraud)-1, as.numeric(test$is_fraud)-1)
-#561712.9
 
 #decision tree--------------
-#data preprocessing for decision tree
 
-tree.1 <- rpart(data=train, is_fraud~.,control=rpart.control(cp=0.0001))
-printcp(tree.1)
-plotcp(tree.1)
+tuneGrid <- expand.grid(cp = seq(0.0001,0.001, length.out = 10))
 
-# based on the plot:  the min CV error is with cp=0.00058 
-# (which produces a tree with 202 leaf nodes)--> overfitting?
-pfit<-prune(tree.1,cp=0.00058)
+fitControl <- trainControl(method="repeatedcv",
+                           number=10, 
+                           repeats=5,
+                           verboseIter = TRUE, 
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary)
 
-pred = predict(pfit,test, type="prob")[,2]
-confusionMatrix(predict(pfit,test, type = "class"), as.numeric(as.character(test$is_fraud)), positive="1")
+fit.tree1 <- train(is_fraud~.,data=train,
+                   method="rpart",
+                   trControl=fitControl,
+                   tuneGrid = tuneGrid,
+                   metric = "ROC")
+plot(fit.tree1)
+#    ROC        Sens       Spec
+# 0.9801128  0.9962640  0.6537730
 
-# assess the classifier
-#Confusion Matrix and Statistics
+#predict and performance measure
+test.tree = predict(fit.tree1, test)
 
-#              Reference
-#Prediction      0      1
-#0 152866   1427
-#1    393   2228
-lloss = logLoss(as.numeric(as.character(test$is_fraud)),pred)
+test.tree = as.numeric(test.tree)-1
+pred.tree = prediction(test.tree, as.numeric(test$is_fraud)-1)
+performance(pred.tree, "auc")
+#0.8223049 Area under the ROC curve
 
-Evaluation(as.numeric(as.character(test$is_fraud)), pred)
+tree.frame = data.frame(test.tree)
+tree.frame$true = as.numeric(test$is_fraud)-1
+kappa2(tree.frame)
+#Kappa = 0.711
+
+ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
+#447750.5 dollars tree
 
 #random forest-----------------
 
-tuneGrid = expand.grid(.mtry = c(1:12))
+tuneGrid = expand.grid(.mtry = seq(2,20, length.out = 10))
 
-fitControl <- trainControl(method="repeatedcv",number=10, repeats=5, verboseIter = TRUE)
+fitControl <- trainControl(method="repeatedcv",
+                           number=10, 
+                           repeats=5,
+                           verboseIter = TRUE, 
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary)
 
 rf_model<-train(is_fraud~.,data=train,
                 method="rf",
                 trControl=fitControl,
                 tuneGrid = tuneGrid,
-                ntree = 20)
+                ntree = 50,
+                metric = "ROC")
 
 plot(rf_model)
 
+#  ROC        Sens       Spec
+#0.9823964  0.9981013  0.6710041
 
-#now build single model with ntree = 1500 and with optimal mtry = 13
-rf_final <- randomForest(is_fraud ~ ., data = train, ntrees=1500, mtry=13)
+##predict and performance measure
+test.forest = predict(rf_model, test)
 
+test.forest = as.numeric(test.forest)-1
+pred.forest = prediction(test.forest, as.numeric(test$is_fraud)-1)
+performance(pred.forest, "auc")
+#0.8539039 Area under the ROC curve
 
-pred_fr = predict(rf_final, type="class")
-confusionMatrix(pred_fr, dataset$is_fraud)
+forest.frame = data.frame(test.forest)
+forest.frame$true = as.numeric(test$is_fraud)-1
+kappa2(forest.frame)
+#Kappa = 0.794
 
-# assess the classifier
-prediction.randomforest = predict(rf_final, newdata=dataset, type = "prob")[,2]
+ComputeSavings(test$amount, test.forest, as.numeric(test$is_fraud)-1)
+#474133.1 dollars tree
 
-Evaluation(dataset_agg_m[,45], prediction.randomforest)
-
-#Confusion Matrix and Statistics--> overfitting
-
-#             Reference
-#Prediction  0     1
-#0         40289     0
-#1            1  2710
-
-#boosted tree-------
-dataset$country_code = as.factor(dataset$country_code)
-
-#caret
-fitControl <- trainControl(method="repeatedcv",number=10, repeats=5, verboseIter = TRUE)
-
-tuneGrid <- expand.grid(mfinal = c(6,9,21,63,100), maxdepth = c(1,3),
-                        coeflearn = "Freund")
-
-boost_model<-train(is_fraud~.,data=dataset,
-                   method="AdaBoost.M1",
-                   trControl=fitControl,
-                   tuneGrid = tuneGrid,
-                   boos = F,
-                   verbose = TRUE)
-
-plot(boost_model)
-#Fitting mfinal = 100, maxdepth = 3, coeflearn = Freund on full training set
-
-#single model with optimal parameters
-fit_boost<-boosting(is_fraud ~ ., data = dataset, boos = F, mfinal = 100, coeflearn = 'Freund', maxdepth = 3)
-
-#Evaluation
-prediction.boostedtree = predict(fit_boost, newdata=dataset, type = "prob") 
-prediction.boostedtree = prediction.boostedtree$prob[,2]
-Evaluation(dataset_agg_m[,45], prediction.boostedtree)
-
-#Confusion Matrix and Statistics
-
-#           Reference
-#Prediction  0     1
-#0         39837  1725
-#1          453   985
+#XGBoost tree-------
+#split dataset
+set.seed(5)
+sample = sample.split(dataset_agg$is_fraud, SplitRatio = .7)
+train = subset(dataset_agg, sample == TRUE)
+test  = subset(dataset_agg, sample == FALSE)
 
 
+#data preprocessing for XGBoost
+train = data.frame(train)
+train = subset(train, select = -c(id_issuer))
+train = train[,c(1,2,3,4,5,6,7,8,9,10,11,22,13,14,15,16,17,18,19,20,21,12)]
+train$amount_group = as.numeric(as.factor(train$amount_group))
+train$pos_entry_mode = as.numeric(as.factor(train$pos_entry_mode))
+train$is_upscale = as.numeric(as.factor(train$is_upscale))
+train$mcc_group = as.numeric(as.factor(train$mcc_group))
+train$type = as.factor(train$type)
+train$type = as.numeric(train$type)-1
+train$datetime = as.numeric(as.POSIXct(train$datetime))
+
+is_fraud = as.factor(train$is_fraud)
+levels(is_fraud) <- c("no_fraud", "fraud")
+
+
+train_m = as.matrix(train)
+train_m = as(train_m, "dgCMatrix")
+
+
+test = data.frame(test)
+test = subset(test, select = -c(id_issuer, is_fraud))
+test$amount_group = as.numeric(as.factor(test$amount_group))
+test$pos_entry_mode = as.numeric(as.factor(test$pos_entry_mode))
+test$is_upscale = as.numeric(as.factor(test$is_upscale))
+test$mcc_group = as.numeric(as.factor(test$mcc_group))
+test$type = as.factor(test$type)
+test$type = as.numeric(test$type)-1
+test$datetime = as.numeric(as.POSIXct(test$datetime))
+
+
+test_m = as.matrix(test)
+test_m = as(test_m, "dgCMatrix")
+
+
+tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
+                       max_depth = c(7,20),       # Max Tree Depth
+                       eta = 0.3,      # Shrinkage
+                       gamma = 0.2,                 # Minimum Loss Reduction
+                       colsample_bytree = c(0.5,1),      # Subsample Ratio of Columns
+                       min_child_weight = 8,      # Minimum Sum of Instance Weight
+                       subsample = c(0.5, 1))                # Subsample Percentage             
+
+fitControl <- trainControl(method="repeatedcv",
+                           number=2, 
+                           repeats=1,
+                           verboseIter = TRUE, 
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary,
+                           allowParallel = TRUE)
+
+xgboost_1<-train(x = train_m[,-22],
+                y = is_fraud,
+                method="xgbTree",
+                trControl=fitControl,
+                tuneGrid = tuneGrid,
+                ntree = 50,
+                metric = "ROC",
+                max_delta_step = 1,
+                scale_pos_weight = 42,
+                objective = "binary:logistic") 
+
+
+plot(xgboost_1)
+
+
+##predict and performance measure
+test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict probabiloties
+test.xgboost = as.numeric(test.xgboost>0.5)
+pred.xgboost = prediction(test.xgboost, trueval)
+performance(pred.xgboost, "auc")
+#0.373271 Area under the ROC curve
+
+
+
+#Savings---------
 ComputeSavings <- function(amounts, pred.values, true.values) {
   predictions <- data.frame(amounts, pred.values, true.values)
   
