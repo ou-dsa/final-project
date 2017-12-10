@@ -234,12 +234,12 @@ test_m = as(test_m, "dgCMatrix")
 
 
 tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
-                       max_depth = 20,       # Max Tree Depth
-                       eta = 0.3,      # Shrinkage
-                       gamma = 0.2,                 # Minimum Loss Reduction
-                       colsample_bytree = 0.5,      # Subsample Ratio of Columns
-                       min_child_weight = 8,      # Minimum Sum of Instance Weight
-                       subsample = 1)                # Subsample Percentage             
+                       max_depth = c(4, 7, 20),       # Max Tree Depth
+                       eta = 0.3,                     # Shrinkage
+                       gamma = c(0, 0.8),             # Minimum Loss Reduction
+                       colsample_bytree = c(0.5,1),   # Subsample Ratio of Columns
+                       min_child_weight = c(1,8),     # Minimum Sum of Instance Weight
+                       subsample = 1)                 # Subsample Percentage             
 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
@@ -269,9 +269,15 @@ test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict proba
 test.xgboost = as.numeric(test.xgboost>0.5)
 pred.xgboost = prediction(test.xgboost, trueval)
 performance(pred.xgboost, "auc")
-#0.373271 Area under the ROC curve
+#0.8159726 under the ROC curve
 
+xgboost.frame = data.frame(test.xgboost)
+xgboost.frame$true = as.numeric(trueval)
+kappa2(xgboost.frame)
+#Kappa = 0.764
 
+ComputeSavings(test$amount, test.xgboost, trueval)
+#443403.9 dollars xgboost
 
 #Savings---------
 ComputeSavings <- function(amounts, pred.values, true.values) {
