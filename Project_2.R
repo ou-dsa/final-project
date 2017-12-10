@@ -78,8 +78,8 @@ test = subset(test, select = -c(id_issuer))
 
 #logistic regression
 fitControl <- trainControl(method="repeatedcv",
-                           number=10, 
-                           repeats=5,
+                           number=5, 
+                           repeats=1,
                            verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
@@ -106,7 +106,7 @@ performance(pred.glm, "auc")
 glm.frame = data.frame(test.glm)
 glm.frame$true = as.numeric(test$is_fraud)-1
 kappa2(glm.frame)
-#Kappa = 0.664
+#Kappa = 0.665
 
 ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
 #412802.6 dollars glm
