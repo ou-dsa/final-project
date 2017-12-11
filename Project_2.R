@@ -73,7 +73,6 @@ train$datetime = as.numeric(as.POSIXct(train$datetime))
 train$is_fraud = as.factor(train$is_fraud)
 levels(train$is_fraud) <- c("no_fraud", "fraud")
 train = subset(train, select = -c(id_issuer))
-# try train$amount = log(train$amount)
 
 
 test = data.frame(test)
@@ -86,12 +85,12 @@ test$datetime = as.numeric(as.POSIXct(test$datetime))
 test$is_fraud = as.factor(test$is_fraud)
 levels(test$is_fraud) <- c("no_fraud", "fraud")
 test = subset(test, select = -c(id_issuer))
-# try test$amount = log(test$amount)
+
 
 #logistic regression
 fitControl <- trainControl(method="repeatedcv",
-                           number=5, 
-                           repeats=1,
+                           number=10, 
+                           repeats=5,
                            verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
