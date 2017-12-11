@@ -1,3 +1,4 @@
+library(readr)
 library(caret)
 library(ROCR)
 library(Metrics)
@@ -15,8 +16,13 @@ library(dplyr)
 library(dummies)
 library(Matrix)
 
+
+#Load dataset
+dataset = read_csv("dataset.csv")
+
 #EDA---
 
+# total and fraudulent transactions over time
 x = data.frame(dataset$is_fraud)
 x$date = dataset$datetime
 x$my = floor_date(dataset$datetime, "month")
@@ -41,16 +47,19 @@ p = ggplot() +
 p$labels$colour <- "Legend"
 p
 
+# boxplot of amount vs fraud/no_fraud
 dataset$is_fraud = as.factor(dataset$is_fraud)
-#dataset$amount = log(dataset$amount)
+levels(dataset$is_fraud) <- c("no_fraud", "fraud")
+dataset$amount = log(dataset$amount)
 ggplot(dataset, aes(x = is_fraud, y = amount, group = is_fraud)) + geom_boxplot() +
-  labs(x = "Predictor Variables", title = "Glass Data")
+  labs(x = "Predictor Variables", title = "Fraud data")
 
 #split dataset
+dataset = read_csv("dataset.csv")
 set.seed(5)
-sample = sample.split(dataset_agg$is_fraud, SplitRatio = .7)
-train = subset(dataset_agg, sample == TRUE)
-test  = subset(dataset_agg, sample == FALSE)
+sample = sample.split(dataset$is_fraud, SplitRatio = .7)
+train = subset(dataset, sample == TRUE)
+test  = subset(dataset, sample == FALSE)
 
 
 #data preprocessing for logistic regression
@@ -64,6 +73,8 @@ train$datetime = as.numeric(as.POSIXct(train$datetime))
 train$is_fraud = as.factor(train$is_fraud)
 levels(train$is_fraud) <- c("no_fraud", "fraud")
 train = subset(train, select = -c(id_issuer))
+# try train$amount = log(train$amount)
+
 
 test = data.frame(test)
 test$amount_group = as.factor(test$amount_group)
@@ -75,6 +86,7 @@ test$datetime = as.numeric(as.POSIXct(test$datetime))
 test$is_fraud = as.factor(test$is_fraud)
 levels(test$is_fraud) <- c("no_fraud", "fraud")
 test = subset(test, select = -c(id_issuer))
+# try test$amount = log(test$amount)
 
 #logistic regression
 fitControl <- trainControl(method="repeatedcv",
