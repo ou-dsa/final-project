@@ -166,7 +166,7 @@ ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
 
 #random forest-----------------
 
-tuneGrid = expand.grid(.mtry = seq(2,20, length.out = 10))
+tuneGrid = expand.grid(.mtry = 13)
 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
@@ -179,7 +179,7 @@ rf_model<-train(is_fraud~.,data=train,
                 method="rf",
                 trControl=fitControl,
                 tuneGrid = tuneGrid,
-                ntree = 50,
+                ntree = 500,
                 metric = "ROC")
 
 plot(rf_model)
