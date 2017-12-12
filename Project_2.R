@@ -72,7 +72,7 @@ train$type = as.factor(train$type)
 train$datetime = as.numeric(as.POSIXct(train$datetime))
 train$is_fraud = as.factor(train$is_fraud)
 levels(train$is_fraud) <- c("no_fraud", "fraud")
-#train = subset(train, select = -c(id_issuer))
+train = subset(train, select = -c(id_issuer))
 
 
 test = data.frame(test)
@@ -84,33 +84,26 @@ test$type = as.factor(test$type)
 test$datetime = as.numeric(as.POSIXct(test$datetime))
 test$is_fraud = as.factor(test$is_fraud)
 levels(test$is_fraud) <- c("no_fraud", "fraud")
-#test = subset(test, select = -c(id_issuer))
+test = subset(test, select = -c(id_issuer))
 
 
 #logistic regression
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
-                           repeats=1,
+                           repeats=5,
                            verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
 
-fit.glm_1 <- train(is_fraud ~ . - id_issuer,
-                   data = train,
-                   method = "glm",
-                   trControl = fitControl,
-                   metric = "ROC")
+fit.glm_1 <- train(is_fraud~.,data=train,
+                    method="glm",
+                    trControl=fitControl,
+                    metric = "ROC")
 fit.glm_1
 summary(fit.glm_1)
 # Best model
 #  ROC        Sens      Spec     
 #0.9690768  0.997089  0.5568035
-
-fit.glm_2 <- train(is_fraud ~ . - id_issuer - sum_1d - sum_7d,
-                   data = train,
-                   method = "glm",
-                   trControl = fitControl,
-                   metric = "ROC")
 
 #predict and performance measure
 
@@ -131,6 +124,8 @@ ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
 
 ComputeSavings(test$amount, as.numeric(test$is_fraud)-1, as.numeric(test$is_fraud)-1)
 #561712.9 theoretical max savings
+
+
 
 
 #decision tree--------------
@@ -171,11 +166,11 @@ ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
 
 #random forest-----------------
 
-tuneGrid = expand.grid(.mtry = c(7, 13, 25))
+tuneGrid = expand.grid(.mtry = 13)
 
 fitControl <- trainControl(method="repeatedcv",
-                           number = 10, 
-                           repeats = 5,
+                           number=10, 
+                           repeats=5,
                            verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
@@ -184,7 +179,7 @@ rf_model<-train(is_fraud~.,data=train,
                 method="rf",
                 trControl=fitControl,
                 tuneGrid = tuneGrid,
-                ntree = 50,
+                ntree = 500,
                 metric = "ROC")
 
 plot(rf_model)
