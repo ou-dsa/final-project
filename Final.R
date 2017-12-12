@@ -42,6 +42,7 @@ for (i in 1:nrow(time.windows)) {
   card.fraud <- card.fraud[, !names(card.fraud) %in% c("Id")]
 }
 
+#fraud ratio per id_issuer
 issuers <- unique(card.fraud$id_issuer)
 card.fraud[, "frd_by_id_issuer"] <- NA
 for (issuer in issuers) {
@@ -50,6 +51,7 @@ for (issuer in issuers) {
   card.fraud$frd_by_id_issuer[card.fraud$id_issuer == issuer] <- issuer.frauds/issuer.count
 }
 
+#fraud ratio per merchant
 merchants <- unique(card.fraud$id_merchant)
 card.fraud[, "frd_by_id_merchant"] <- NA
 for (merchant in merchants) {
