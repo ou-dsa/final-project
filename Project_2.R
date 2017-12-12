@@ -230,6 +230,7 @@ train_m = as(train_m, "dgCMatrix")
 
 
 test = data.frame(test)
+trueval <- as.numeric(test$is_fraud)
 test = subset(test, select = -c(id_issuer, is_fraud))
 test$amount_group = as.numeric(as.factor(test$amount_group))
 test$pos_entry_mode = as.numeric(as.factor(test$pos_entry_mode))
@@ -280,15 +281,15 @@ test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict proba
 test.xgboost = as.numeric(test.xgboost>0.5)
 pred.xgboost = prediction(test.xgboost, trueval)
 performance(pred.xgboost, "auc")
-#0.8159726 under the ROC curve
+#0.8283171 under the ROC curve
 
 xgboost.frame = data.frame(test.xgboost)
 xgboost.frame$true = as.numeric(trueval)
 kappa2(xgboost.frame)
-#Kappa = 0.764
+#Kappa = 0.783
 
 ComputeSavings(test$amount, test.xgboost, trueval)
-#443403.9 dollars xgboost
+#452741 dollars xgboost
 
 #Savings---------
 ComputeSavings <- function(amounts, pred.values, true.values) {
