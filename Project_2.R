@@ -16,9 +16,30 @@ library(dplyr)
 library(dummies)
 library(Matrix)
 
+#Savings---------
+ComputeSavings <- function(amounts, pred.values, true.values) {
+  predictions <- data.frame(amounts, pred.values, true.values)
+  
+  costs <- 0
+  for (i in 1:nrow(predictions)) {
+    pred.value <- predictions$pred.values[i]
+    true.value <- predictions$true.values[i]
+    
+    if (pred.value == 1) {
+      costs <- costs + 20
+    } else if (pred.value == 0 & true.value == 1) {
+      costs <- costs + predictions$amount[i]
+    }
+  }
+  
+  savings <- sum(predictions$amounts[predictions$true.values == 1]) - costs
+  
+  return(savings)
+}
 
 #Load dataset
-dataset = read_csv("dataset.csv")
+dataset <- read_csv("dataset_agg.csv", 
+                    col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
 
 #EDA---
 
@@ -55,14 +76,15 @@ ggplot(dataset, aes(x = is_fraud, y = amount, group = is_fraud)) + geom_boxplot(
   labs(x = "Predictor Variables", title = "Fraud data")
 
 #split dataset
-dataset = read_csv("dataset.csv")
+dataset <- read_csv("dataset_agg.csv", 
+                    col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
 set.seed(5)
 sample = sample.split(dataset$is_fraud, SplitRatio = .7)
 train = subset(dataset, sample == TRUE)
 test  = subset(dataset, sample == FALSE)
 
 
-#data preprocessing for logistic regression
+#data preprocessing for logistic regression, decision tree and random forest
 train = data.frame(train)
 train$amount_group = as.factor(train$amount_group)
 train$pos_entry_mode = as.factor(train$pos_entry_mode)
@@ -87,11 +109,10 @@ levels(test$is_fraud) <- c("no_fraud", "fraud")
 test = subset(test, select = -c(id_issuer))
 
 
-#logistic regression
+#logistic regression with AUC as performance measure 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
                            repeats=5,
-                           verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
 
@@ -101,9 +122,6 @@ fit.glm_1 <- train(is_fraud~.,data=train,
                     metric = "ROC")
 fit.glm_1
 summary(fit.glm_1)
-# Best model
-#  ROC        Sens      Spec     
-#0.9690768  0.997089  0.5568035
 
 #predict and performance measure
 
@@ -112,30 +130,56 @@ test.glm = predict(fit.glm_1, test)
 test.glm = as.numeric(test.glm)-1
 pred.glm = prediction(test.glm, as.numeric(test$is_fraud)-1)
 performance(pred.glm, "auc")
-#0.7812106 Area under the ROC curve
+
 
 glm.frame = data.frame(test.glm)
 glm.frame$true = as.numeric(test$is_fraud)-1
 kappa2(glm.frame)
-#Kappa = 0.665
+
 
 ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
-#412802.6 dollars glm
 
+#theoretical max savings
 ComputeSavings(test$amount, as.numeric(test$is_fraud)-1, as.numeric(test$is_fraud)-1)
-#561712.9 theoretical max savings
+
+
+#logistic regression with Kappa as performance measure 
+fitControl <- trainControl(method="repeatedcv",
+                           number=10, 
+                           repeats=5)
+
+fit.glm_1 <- train(is_fraud~.,data=train,
+                   method="glm",
+                   trControl=fitControl,
+                   metric = "Kappa")
+fit.glm_1
+summary(fit.glm_1)
+
+#predict and performance measure
+
+test.glm = predict(fit.glm_1, test)
+
+test.glm = as.numeric(test.glm)-1
+pred.glm = prediction(test.glm, as.numeric(test$is_fraud)-1)
+performance(pred.glm, "auc")
+
+
+glm.frame = data.frame(test.glm)
+glm.frame$true = as.numeric(test$is_fraud)-1
+kappa2(glm.frame)
+
+
+ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
 
 
 
-
-#decision tree--------------
+#decision tree with AUC as performance meaure--------------
 
 tuneGrid <- expand.grid(cp = seq(0.0001,0.001, length.out = 10))
 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
-                           repeats=5,
-                           verboseIter = TRUE, 
+                           repeats=5, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
 
@@ -144,9 +188,9 @@ fit.tree1 <- train(is_fraud~.,data=train,
                    trControl=fitControl,
                    tuneGrid = tuneGrid,
                    metric = "ROC")
+fit.tree1
 plot(fit.tree1)
-#    ROC        Sens       Spec
-# 0.9801128  0.9962640  0.6537730
+
 
 #predict and performance measure
 test.tree = predict(fit.tree1, test)
@@ -154,24 +198,56 @@ test.tree = predict(fit.tree1, test)
 test.tree = as.numeric(test.tree)-1
 pred.tree = prediction(test.tree, as.numeric(test$is_fraud)-1)
 performance(pred.tree, "auc")
-#0.8223049 Area under the ROC curve
+
 
 tree.frame = data.frame(test.tree)
 tree.frame$true = as.numeric(test$is_fraud)-1
 kappa2(tree.frame)
-#Kappa = 0.711
+
 
 ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
-#447750.5 dollars tree
 
-#random forest-----------------
 
-tuneGrid = expand.grid(.mtry = 13)
+#decision tree with Kappa as performance meaure--------------
+
+tuneGrid <- expand.grid(cp = seq(0.0001,0.001, length.out = 10))
+
+fitControl <- trainControl(method="repeatedcv",
+                           number=10, 
+                           repeats=5)
+
+fit.tree1 <- train(is_fraud~.,data=train,
+                   method="rpart",
+                   trControl=fitControl,
+                   tuneGrid = tuneGrid,
+                   metric = "Kappa")
+fit.tree1
+plot(fit.tree1)
+
+
+#predict and performance measure
+test.tree = predict(fit.tree1, test)
+
+test.tree = as.numeric(test.tree)-1
+pred.tree = prediction(test.tree, as.numeric(test$is_fraud)-1)
+performance(pred.tree, "auc")
+
+
+tree.frame = data.frame(test.tree)
+tree.frame$true = as.numeric(test$is_fraud)-1
+kappa2(tree.frame)
+
+
+ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
+
+
+#random forest with AUC as performance measure-----------------
+
+tuneGrid = expand.grid(.mtry = c(7,13,25))
 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
                            repeats=5,
-                           verboseIter = TRUE, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary)
 
@@ -179,13 +255,11 @@ rf_model<-train(is_fraud~.,data=train,
                 method="rf",
                 trControl=fitControl,
                 tuneGrid = tuneGrid,
-                ntree = 500,
+                ntree = 50,
                 metric = "ROC")
-
+rf_model
 plot(rf_model)
 
-#  ROC        Sens       Spec
-#0.9823964  0.9981013  0.6710041
 
 ##predict and performance measure
 test.forest = predict(rf_model, test)
@@ -193,22 +267,59 @@ test.forest = predict(rf_model, test)
 test.forest = as.numeric(test.forest)-1
 pred.forest = prediction(test.forest, as.numeric(test$is_fraud)-1)
 performance(pred.forest, "auc")
-#0.8539039 Area under the ROC curve
+
 
 forest.frame = data.frame(test.forest)
 forest.frame$true = as.numeric(test$is_fraud)-1
 kappa2(forest.frame)
-#Kappa = 0.794
+
 
 ComputeSavings(test$amount, test.forest, as.numeric(test$is_fraud)-1)
-#474133.1 dollars tree
+
+
+#random forest with Kappa as performance measure-----------------
+
+tuneGrid = expand.grid(.mtry = 13)
+
+fitControl <- trainControl(method="repeatedcv",
+                           number=10, 
+                           repeats=5)
+
+rf_model<-train(is_fraud~.,data=train,
+                method="rf",
+                trControl=fitControl,
+                tuneGrid = tuneGrid,
+                ntree = 50,
+                metric = "Kappa")
+rf_model
+plot(rf_model)
+
+
+
+##predict and performance measure
+test.forest = predict(rf_model, test)
+
+test.forest = as.numeric(test.forest)-1
+pred.forest = prediction(test.forest, as.numeric(test$is_fraud)-1)
+performance(pred.forest, "auc")
+
+
+forest.frame = data.frame(test.forest)
+forest.frame$true = as.numeric(test$is_fraud)-1
+kappa2(forest.frame)
+
+
+ComputeSavings(test$amount, test.forest, as.numeric(test$is_fraud)-1)
+
 
 #XGBoost tree-------
+dataset <- read_csv("dataset_agg.csv", 
+                    col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
 #split dataset
 set.seed(5)
-sample = sample.split(dataset_agg$is_fraud, SplitRatio = .7)
-train = subset(dataset_agg, sample == TRUE)
-test  = subset(dataset_agg, sample == FALSE)
+sample = sample.split(dataset$is_fraud, SplitRatio = .7)
+train = subset(dataset, sample == TRUE)
+test  = subset(dataset, sample == FALSE)
 
 
 #data preprocessing for XGBoost
@@ -244,7 +355,7 @@ test$datetime = as.numeric(as.POSIXct(test$datetime))
 test_m = as.matrix(test)
 test_m = as(test_m, "dgCMatrix")
 
-
+#XGBoost with AUC as performance measure
 tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
                        max_depth = c(4, 7, 20),       # Max Tree Depth
                        eta = 0.3,                     # Shrinkage
@@ -255,8 +366,7 @@ tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
-                           repeats=5,
-                           verboseIter = TRUE, 
+                           repeats=5, 
                            classProbs = TRUE,
                            summaryFunction = twoClassSummary,
                            allowParallel = TRUE)
@@ -272,7 +382,7 @@ xgboost_1<-train(x = train_m,
                 scale_pos_weight = 42,
                 objective = "binary:logistic") 
 
-
+xgboost_1
 plot(xgboost_1)
 
 
@@ -281,33 +391,56 @@ test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict proba
 test.xgboost = as.numeric(test.xgboost>0.5)
 pred.xgboost = prediction(test.xgboost, trueval)
 performance(pred.xgboost, "auc")
-#0.8283171 under the ROC curve
+
 
 xgboost.frame = data.frame(test.xgboost)
 xgboost.frame$true = as.numeric(trueval)
 kappa2(xgboost.frame)
-#Kappa = 0.783
+
 
 ComputeSavings(test$amount, test.xgboost, trueval)
-#452741 dollars xgboost
 
-#Savings---------
-ComputeSavings <- function(amounts, pred.values, true.values) {
-  predictions <- data.frame(amounts, pred.values, true.values)
-  
-  costs <- 0
-  for (i in 1:nrow(predictions)) {
-    pred.value <- predictions$pred.values[i]
-    true.value <- predictions$true.values[i]
-    
-    if (pred.value == 1) {
-      costs <- costs + 20
-    } else if (pred.value == 0 & true.value == 1) {
-      costs <- costs + predictions$amount[i]
-    }
-  }
-  
-  savings <- sum(predictions$amounts[predictions$true.values == 1]) - costs
-  
-  return(savings)
-}
+
+#XGBoost with Kappa as performance measure
+tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
+                       max_depth = 20,       # Max Tree Depth
+                       eta = 0.3,                     # Shrinkage
+                       gamma = 0,             # Minimum Loss Reduction
+                       colsample_bytree = 1,   # Subsample Ratio of Columns
+                       min_child_weight = 1,     # Minimum Sum of Instance Weight
+                       subsample = 1)                 # Subsample Percentage             
+
+fitControl <- trainControl(method="repeatedcv",
+                           number=10, 
+                           repeats=5,
+                           classProbs = TRUE)
+
+xgboost_1<-train(x = train_m,
+                 y = is_fraud,
+                 method="xgbTree",
+                 trControl=fitControl,
+                 tuneGrid = tuneGrid,
+                 ntree = 50,
+                 metric = "Kappa",
+                 max_delta_step = 1,
+                 scale_pos_weight = 42,
+                 objective = "binary:logistic") 
+
+xgboost_1
+plot(xgboost_1)
+
+
+##predict and performance measure
+test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict probabiloties
+test.xgboost = as.numeric(test.xgboost>0.5)
+pred.xgboost = prediction(test.xgboost, trueval)
+performance(pred.xgboost, "auc")
+
+
+xgboost.frame = data.frame(test.xgboost)
+xgboost.frame$true = as.numeric(trueval)
+kappa2(xgboost.frame)
+
+
+ComputeSavings(test$amount, test.xgboost, trueval)
+
