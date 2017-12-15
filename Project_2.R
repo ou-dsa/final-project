@@ -413,7 +413,7 @@ tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
                            repeats=5,
-                           classProbs = TRUE)
+                           allowParallel = TRUE)
 
 xgboost_1<-train(x = train_m,
                  y = is_fraud,
