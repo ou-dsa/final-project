@@ -243,7 +243,7 @@ ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
 
 #random forest with AUC as performance measure-----------------
 
-tuneGrid = expand.grid(.mtry = c(7,13,25))
+tuneGrid = expand.grid(.mtry = c(7,13))
 
 fitControl <- trainControl(method="repeatedcv",
                            number=10, 
@@ -360,7 +360,7 @@ tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
                        max_depth = c(4, 7, 20),       # Max Tree Depth
                        eta = 0.3,                     # Shrinkage
                        gamma = c(0, 0.8),             # Minimum Loss Reduction
-                       colsample_bytree = c(0.5,1),   # Subsample Ratio of Columns
+                       colsample_bytree = 1,   # Subsample Ratio of Columns
                        min_child_weight = c(1,8),     # Minimum Sum of Instance Weight
                        subsample = 1)                 # Subsample Percentage             
 
