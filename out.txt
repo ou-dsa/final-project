@@ -1,0 +1,316 @@
+
+R version 3.4.2 (2017-09-28) -- "Short Summer"
+Copyright (C) 2017 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(readr)
+> library(caret)
+Loading required package: lattice
+Loading required package: ggplot2
+> library(ROCR)
+Loading required package: gplots
+
+Attaching package: ‘gplots’
+
+The following object is masked from ‘package:stats’:
+
+    lowess
+
+> library(Metrics)
+> library(ggplot2)
+> library(rpart)
+> library(ggplot2)
+> library(scales)
+
+Attaching package: ‘scales’
+
+The following object is masked from ‘package:readr’:
+
+    col_factor
+
+> library(reshape2)
+> library(lubridate)
+
+Attaching package: ‘lubridate’
+
+The following object is masked from ‘package:base’:
+
+    date
+
+> library(plyr)
+
+Attaching package: ‘plyr’
+
+The following object is masked from ‘package:lubridate’:
+
+    here
+
+> library(irr)
+Loading required package: lpSolve
+> library(caTools)
+> library(magrittr)
+> library(dplyr)
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:plyr’:
+
+    arrange, count, desc, failwith, id, mutate, rename, summarise,
+    summarize
+
+The following objects are masked from ‘package:lubridate’:
+
+    intersect, setdiff, union
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+> library(dummies)
+dummies-1.5.6 provided by Decision Patterns
+
+> library(Matrix)
+> 
+> #Savings---------
+> ComputeSavings <- function(amounts, pred.values, true.values) {
++   predictions <- data.frame(amounts, pred.values, true.values)
++   
++   costs <- 0
++   for (i in 1:nrow(predictions)) {
++     pred.value <- predictions$pred.values[i]
++     true.value <- predictions$true.values[i]
++     
++     if (pred.value == 1) {
++       costs <- costs + 20
++     } else if (pred.value == 0 & true.value == 1) {
++       costs <- costs + predictions$amount[i]
++     }
++   }
++   
++   savings <- sum(predictions$amounts[predictions$true.values == 1]) - costs
++   
++   return(savings)
++ }
+> 
+> #Load dataset
+> dataset <- read_csv("dataset_agg.csv", 
++                     col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
+> 
+> #split dataset
+> set.seed(5)
+> sample = sample.split(dataset$is_fraud, SplitRatio = .7)
+> train = subset(dataset, sample == TRUE)
+> test  = subset(dataset, sample == FALSE)
+> 
+> 
+> #data preprocessing for logistic regression, decision tree and random forest
+> train = data.frame(train)
+> train$amount_group = as.factor(train$amount_group)
+> train$pos_entry_mode = as.factor(train$pos_entry_mode)
+> train$is_upscale = as.factor(train$is_upscale)
+> train$mcc_group = as.factor(train$mcc_group)
+> train$type = as.factor(train$type)
+> train$datetime = as.numeric(as.POSIXct(train$datetime))
+> train$is_fraud = as.factor(train$is_fraud)
+> levels(train$is_fraud) <- c("no_fraud", "fraud")
+> train = subset(train, select = -c(id_issuer))
+> 
+> 
+> test = data.frame(test)
+> test$amount_group = as.factor(test$amount_group)
+> test$pos_entry_mode = as.factor(test$pos_entry_mode)
+> test$is_upscale = as.factor(test$is_upscale)
+> test$mcc_group = as.factor(test$mcc_group)
+> test$type = as.factor(test$type)
+> test$datetime = as.numeric(as.POSIXct(test$datetime))
+> test$is_fraud = as.factor(test$is_fraud)
+> levels(test$is_fraud) <- c("no_fraud", "fraud")
+> test = subset(test, select = -c(id_issuer))
+> 
+> 
+> #random forest with Kappa as performance measure-----------------
+> 
+> tuneGrid = expand.grid(.mtry = 13)
+> 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5)
+> 
+> rf_model<-train(is_fraud~.,data=train,
++                 method="rf",
++                 trControl=fitControl,
++                 tuneGrid = tuneGrid,
++                 ntree = 50,
++                 metric = "Kappa")
+randomForest 4.6-12
+Type rfNews() to see new features/changes/bug fixes.
+
+Attaching package: ‘randomForest’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+The following object is masked from ‘package:ggplot2’:
+
+    margin
+
+> rf_model
+Random Forest 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329522, 329521, 329521, 329521, 329522, 329522, ... 
+Resampling results:
+
+  Accuracy   Kappa    
+  0.9916206  0.7946019
+
+Tuning parameter 'mtry' was held constant at a value of 13
+> 
+> 
+> 
+> ##predict and performance measure
+> test.forest = predict(rf_model, test)
+> 
+> test.forest = as.numeric(test.forest)-1
+> pred.forest = prediction(test.forest, as.numeric(test$is_fraud)-1)
+> performance(pred.forest, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8585127
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> forest.frame = data.frame(test.forest)
+> forest.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(forest.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.799 
+
+        z = 319 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount, test.forest, as.numeric(test$is_fraud)-1)
+[1] 475686.3
+> 
+> 
+> #XGBoost tree-------
+> dataset <- read_csv("dataset_agg.csv", 
++                     col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
+> #split dataset
+> set.seed(5)
+> sample = sample.split(dataset$is_fraud, SplitRatio = .7)
+> train = subset(dataset, sample == TRUE)
+> test  = subset(dataset, sample == FALSE)
+> 
+> 
+> #data preprocessing for XGBoost
+> train = data.frame(train)
+> is_fraud = as.factor(train$is_fraud)
+> levels(is_fraud) <- c("no_fraud", "fraud")
+> 
+> train = subset(train, select = -c(id_issuer, is_fraud))
+> train$amount_group = as.numeric(as.factor(train$amount_group))
+> train$pos_entry_mode = as.numeric(as.factor(train$pos_entry_mode))
+> train$is_upscale = as.numeric(as.factor(train$is_upscale))
+> train$mcc_group = as.numeric(as.factor(train$mcc_group))
+> train$type = as.factor(train$type)
+> train$type = as.numeric(train$type)-1
+> train$datetime = as.numeric(as.POSIXct(train$datetime))
+> 
+> train_m = as.matrix(train)
+> train_m = as(train_m, "dgCMatrix")
+> 
+> 
+> test = data.frame(test)
+> trueval <- as.numeric(test$is_fraud)
+> test = subset(test, select = -c(id_issuer, is_fraud))
+> test$amount_group = as.numeric(as.factor(test$amount_group))
+> test$pos_entry_mode = as.numeric(as.factor(test$pos_entry_mode))
+> test$is_upscale = as.numeric(as.factor(test$is_upscale))
+> test$mcc_group = as.numeric(as.factor(test$mcc_group))
+> test$type = as.factor(test$type)
+> test$type = as.numeric(test$type)-1
+> test$datetime = as.numeric(as.POSIXct(test$datetime))
+> 
+> 
+> test_m = as.matrix(test)
+> test_m = as(test_m, "dgCMatrix")
+> 
+> #XGBoost with AUC as performance measure
+> tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
++                        max_depth = c(4, 7, 20),       # Max Tree Depth
++                        eta = 0.3,                     # Shrinkage
++                        gamma = c(0, 0.8),             # Minimum Loss Reduction
++                        colsample_bytree = 1,   # Subsample Ratio of Columns
++                        min_child_weight = c(1,8),     # Minimum Sum of Instance Weight
++                        subsample = 1)                 # Subsample Percentage             
+> 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5, 
++                            classProbs = TRUE,
++                            summaryFunction = twoClassSummary,
++                            allowParallel = TRUE)
+> 
+> xgboost_1<-train(x = train_m,
++                 y = is_fraud,
++                 method="xgbTree",
++                 trControl=fitControl,
++                 tuneGrid = tuneGrid,
++                 ntree = 50,
++                 metric = "ROC",
++                 max_delta_step = 1,
++                 scale_pos_weight = 42,
++                 objective = "binary:logistic") 
+
+Attaching package: ‘xgboost’
+
+The following object is masked from ‘package:dplyr’:
+
+    slice
+
