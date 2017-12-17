@@ -1,4 +1,4 @@
-
+﻿
 R version 3.4.2 (2017-09-28) -- "Short Summer"
 Copyright (C) 2017 The R Foundation for Statistical Computing
 Platform: x86_64-pc-linux-gnu (64-bit)
@@ -281,22 +281,21 @@ list()
 > test_m = as.matrix(test)
 > test_m = as(test_m, "dgCMatrix")
 > 
-> #XGBoost with AUC as performance measure
+#XGBoost with AUC as performance measure
 > tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
-+                        max_depth = c(4, 7, 20),       # Max Tree Depth
++                        max_depth = c(7,20),       # Max Tree Depth
 +                        eta = 0.3,                     # Shrinkage
-+                        gamma = c(0, 0.8),             # Minimum Loss Reduction
++                        gamma = 0,             # Minimum Loss Reduction
 +                        colsample_bytree = 1,   # Subsample Ratio of Columns
-+                        min_child_weight = c(1,8),     # Minimum Sum of Instance Weight
-+                        subsample = 1)                 # Subsample Percentage             
-> 
++                        min_child_weight = 1,     # Minimum Sum of Instance Weight
++                        subsample = 1)                # Subsample Percentage
 > fitControl <- trainControl(method="repeatedcv",
 +                            number=10, 
 +                            repeats=5, 
 +                            classProbs = TRUE,
 +                            summaryFunction = twoClassSummary,
-+                            allowParallel = TRUE)
-> 
++                            allowParallel = TRUE,
++                            verboseIter = TRUE)
 > xgboost_1<-train(x = train_m,
 +                 y = is_fraud,
 +                 method="xgbTree",
@@ -306,11 +305,155 @@ list()
 +                 metric = "ROC",
 +                 max_delta_step = 1,
 +                 scale_pos_weight = 42,
-+                 objective = "binary:logistic") 
++                 objective = "binary:logistic")
+Aggregating results
+Selecting tuning parameters
+Fitting nrounds = 100, max_depth = 20, eta = 0.3, gamma = 0, colsample_bytree = 1, min_child_weight = 1, subsample = 1 on full training set
+> xgboost_1
+eXtreme Gradient Boosting 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329521, 329522, 329521, 329522, 329523, 329521, ... 
+Resampling results across tuning parameters:
+
+  max_depth  ROC        Sens       Spec     
+   7         0.9937137  0.9997617  0.4858015
+  20         0.9948765  0.9992595  0.6959541
+
+Tuning parameter 'nrounds' was held constant at a value of 100
+Tuning parameter 'eta' was held constant at
+ parameter 'colsample_bytree' was held constant at a value of 1
+Tuning parameter 'min_child_weight' was
+ held constant at a value of 1
+Tuning parameter 'subsample' was held constant at a value of 1
+ROC was used to select the optimal model using  the largest value.
+The final values used for the model were nrounds = 100, max_depth = 20, eta = 0.3, gamma =
+ 0, colsample_bytree = 1, min_child_weight = 1 and subsample = 1.
+
+##predict and performance measure
+> test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict probabiloties
+> test.xgboost = as.numeric(test.xgboost>0.5)
+> pred.xgboost = prediction(test.xgboost, trueval)
+> performance(pred.xgboost, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8478563
+
+
+Slot "alpha.values":
+list()
+
+> xgboost.frame = data.frame(test.xgboost)
+> xgboost.frame$true = as.numeric(trueval)
+> kappa2(xgboost.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.805 
+
+        z = 323 
+  p-value = 0 
+> ComputeSavings(test$amount, test.xgboost, trueval)
+[1] 474032.5
+
+#XGBoost with Kappa as performance measure
+> tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
++                        max_depth = 20,       # Max Tree Depth
++                        eta = 0.3,                     # Shrinkage
++                        gamma = 0,             # Minimum Loss Reduction
++                        colsample_bytree = 1,   # Subsample Ratio of Columns
++                        min_child_weight = 1,     # Minimum Sum of Instance Weight
++                        subsample = 1)                 # Subsample Percentage
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5,
++                            allowParallel = TRUE,
++                            verboseIter = TRUE)
+> xgboost_1<-train(x = train_m,
++                  y = is_fraud,
++                  method="xgbTree",
++                  trControl=fitControl,
++                  tuneGrid = tuneGrid,
++                  ntree = 50,
++                  metric = "Kappa",
++                  max_delta_step = 1,
++                  scale_pos_weight = 42,
++                  objective = "binary:logistic")
 
 Attaching package: ‘xgboost’
 
 The following object is masked from ‘package:dplyr’:
 
     slice
+> xgboost_1
+eXtreme Gradient Boosting 
 
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329522, 329521, 329522, 329521, 329521, 329522, ... 
+Resampling results:
+
+  Accuracy   Kappa    
+  0.9921756  0.8016512
+
+Tuning parameter 'nrounds' was held constant at a value of 100
+Tuning parameter 'max_depth' was held
+ of 1
+Tuning parameter 'min_child_weight' was held constant at a value of 1
+Tuning parameter 'subsample'
+ was held constant at a value of 1
+
+##predict and performance measure
+> test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict probabiloties
+> test.xgboost = as.numeric(test.xgboost>0.5)
+> pred.xgboost = prediction(test.xgboost, trueval)
+> performance(pred.xgboost, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8478563
+
+
+Slot "alpha.values":
+list()
+
+> xgboost.frame = data.frame(test.xgboost)
+> xgboost.frame$true = as.numeric(trueval)
+> kappa2(xgboost.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.805 
+
+        z = 323 
+  p-value = 0 
+> ComputeSavings(test$amount, test.xgboost, trueval)
+[1] 474032.5

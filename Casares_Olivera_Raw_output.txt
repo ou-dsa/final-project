@@ -1,0 +1,1091 @@
+﻿
+R version 3.4.2 (2017-09-28) -- "Short Summer"
+Copyright (C) 2017 The R Foundation for Statistical Computing
+Platform: x86_64-pc-linux-gnu (64-bit)
+
+R is free software and comes with ABSOLUTELY NO WARRANTY.
+You are welcome to redistribute it under certain conditions.
+Type 'license()' or 'licence()' for distribution details.
+
+  Natural language support but running in an English locale
+
+R is a collaborative project with many contributors.
+Type 'contributors()' for more information and
+'citation()' on how to cite R or R packages in publications.
+
+Type 'demo()' for some demos, 'help()' for on-line help, or
+'help.start()' for an HTML browser interface to help.
+Type 'q()' to quit R.
+
+> library(readr)
+> library(caret)
+Loading required package: lattice
+Loading required package: ggplot2
+> library(ROCR)
+Loading required package: gplots
+
+Attaching package: ‘gplots’
+
+The following object is masked from ‘package:stats’:
+
+    lowess
+
+> library(Metrics)
+> library(ggplot2)
+> library(rpart)
+> library(ggplot2)
+> library(scales)
+
+Attaching package: ‘scales’
+
+The following object is masked from ‘package:readr’:
+
+    col_factor
+
+> library(reshape2)
+> library(lubridate)
+
+Attaching package: ‘lubridate’
+
+The following object is masked from ‘package:base’:
+
+    date
+
+> library(plyr)
+
+Attaching package: ‘plyr’
+
+The following object is masked from ‘package:lubridate’:
+
+    here
+
+> library(irr)
+Loading required package: lpSolve
+> library(caTools)
+> library(magrittr)
+> library(dplyr)
+
+Attaching package: ‘dplyr’
+
+The following objects are masked from ‘package:plyr’:
+
+    arrange, count, desc, failwith, id, mutate, rename, summarise,
+    summarize
+
+The following objects are masked from ‘package:lubridate’:
+
+    intersect, setdiff, union
+
+The following objects are masked from ‘package:stats’:
+
+    filter, lag
+
+The following objects are masked from ‘package:base’:
+
+    intersect, setdiff, setequal, union
+
+> library(dummies)
+dummies-1.5.6 provided by Decision Patterns
+
+> library(Matrix)
+> 
+> #Savings---------
+> ComputeSavings <- function(amounts, pred.values, true.values) {
++   predictions <- data.frame(amounts, pred.values, true.values)
++   
++   costs <- 0
++   for (i in 1:nrow(predictions)) {
++     pred.value <- predictions$pred.values[i]
++     true.value <- predictions$true.values[i]
++     
++     if (pred.value == 1) {
++       costs <- costs + 20
++     } else if (pred.value == 0 & true.value == 1) {
++       costs <- costs + predictions$amount[i]
++     }
++   }
++   
++   savings <- sum(predictions$amounts[predictions$true.values == 1]) - costs
++   
++   return(savings)
++ }
+> 
+> #Load dataset
+> dataset <- read_csv("dataset_agg.csv", 
++                     col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
+> 
+> #EDA---
+> 
+> # total and fraudulent transactions over time
+> x = data.frame(dataset$is_fraud)
+> x$date = dataset$datetime
+> x$my = floor_date(dataset$datetime, "month")
+> x$count = rep(1,nrow(x))
+> 
+> y = ddply(x, "my", summarise, Fraudalent_Transactions = sum(dataset.is_fraud))
+> yy = ddply(x, "my", summarise, Total_Transactions = sum(count))
+> y$Total_Transactions = yy$Total_Transactions
+> 
+> y2 = melt(y, id.vars = 1)
+> 
+> p = ggplot() +  
++   geom_line(aes(my, Fraudalent_Transactions, colour = "Fraudulent Transactions"), y ) +
++   geom_line(data =yy, aes(my, Total_Transactions, colour = "Total Transactions")) +
++   labs(x = "Time",
++        y = "Transactions") +
++   theme(legend.key=element_blank())+
++   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
++                 labels = trans_format("log10", math_format(10^.x)))+
++   scale_color_manual(values=c("red", "black"))
+> 
+> p$labels$colour <- "Legend"
+> p
+> 
+> # boxplot of amount vs fraud/no_fraud
+> dataset$is_fraud = as.factor(dataset$is_fraud)
+> levels(dataset$is_fraud) <- c("no_fraud", "fraud")
+> dataset$amount = log(dataset$amount)
+> ggplot(dataset, aes(x = is_fraud, y = amount, group = is_fraud)) + geom_boxplot() +
++   labs(x = "Predictor Variables", title = "Fraud data")
+Warning message:
+Removed 2431 rows containing non-finite values (stat_boxplot). 
+> 
+> #split dataset
+> dataset <- read_csv("dataset_agg.csv", 
++                     col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
+> set.seed(5)
+> sample = sample.split(dataset$is_fraud, SplitRatio = .7)
+> train = subset(dataset, sample == TRUE)
+> test  = subset(dataset, sample == FALSE)
+> 
+> 
+> #data preprocessing for logistic regression, decision tree and random forest
+> train = data.frame(train)
+> train$amount_group = as.factor(train$amount_group)
+> train$pos_entry_mode = as.factor(train$pos_entry_mode)
+> train$is_upscale = as.factor(train$is_upscale)
+> train$mcc_group = as.factor(train$mcc_group)
+> train$type = as.factor(train$type)
+> train$datetime = as.numeric(as.POSIXct(train$datetime))
+> train$is_fraud = as.factor(train$is_fraud)
+> levels(train$is_fraud) <- c("no_fraud", "fraud")
+> train = subset(train, select = -c(id_issuer))
+> 
+> 
+> test = data.frame(test)
+> test$amount_group = as.factor(test$amount_group)
+> test$pos_entry_mode = as.factor(test$pos_entry_mode)
+> test$is_upscale = as.factor(test$is_upscale)
+> test$mcc_group = as.factor(test$mcc_group)
+> test$type = as.factor(test$type)
+> test$datetime = as.numeric(as.POSIXct(test$datetime))
+> test$is_fraud = as.factor(test$is_fraud)
+> levels(test$is_fraud) <- c("no_fraud", "fraud")
+> test = subset(test, select = -c(id_issuer))
+> 
+> 
+> #logistic regression with AUC as performance measure 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5,
++                            classProbs = TRUE,
++                            summaryFunction = twoClassSummary)
+> 
+> fit.glm_1 <- train(is_fraud~.,data=train,
++                     method="glm",
++                     trControl=fitControl,
++                     metric = "ROC")
+There were 20 warnings (use warnings() to see them)
+> fit.glm_1
+Generalized Linear Model 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329522, 329521, 329521, 329521, 329522, 329522, ... 
+Resampling results:
+
+  ROC       Sens       Spec     
+  0.968879  0.9971013  0.5600659
+
+> summary(fit.glm_1)
+
+Call:
+NULL
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-3.6415  -0.1289  -0.0689  -0.0231   4.3721  
+
+Coefficients:
+                     Estimate Std. Error z value Pr(>|z|)    
+(Intercept)        -4.325e+01  2.870e+00 -15.067  < 2e-16 ***
+amount             -4.278e-05  5.347e-05  -0.800  0.42366    
+id_merchant        -5.480e-07  9.195e-08  -5.960 2.52e-09 ***
+datetime            2.908e-08  1.998e-09  14.557  < 2e-16 ***
+country_code        3.830e-04  1.275e-04   3.005  0.00266 ** 
+tokenized_pan       4.054e-10  2.941e-08   0.014  0.98900    
+amount_groupAX      2.421e-01  1.168e-01   2.074  0.03810 *  
+amount_groupBA     -1.873e+00  7.408e-02 -25.285  < 2e-16 ***
+amount_groupBM     -1.540e+00  6.395e-02 -24.076  < 2e-16 ***
+amount_groupMA     -6.786e-01  5.955e-02 -11.395  < 2e-16 ***
+amount_groupME     -1.181e+00  5.561e-02 -21.242  < 2e-16 ***
+amount_groupMI     -1.757e+00  6.732e-02 -26.097  < 2e-16 ***
+amount_groupMX     -2.659e-01  3.740e-01  -0.711  0.47710    
+pos_entry_mode1    -9.174e-01  2.206e-01  -4.160 3.19e-05 ***
+pos_entry_mode2    -4.776e+00  3.281e-01 -14.557  < 2e-16 ***
+pos_entry_mode5    -4.251e+00  3.086e-01 -13.773  < 2e-16 ***
+pos_entry_mode10   -6.511e-01  2.538e-01  -2.566  0.01030 *  
+pos_entry_mode11   -1.584e+00  4.656e+00  -0.340  0.73369    
+pos_entry_mode12   -1.830e-01  2.939e-01  -0.623  0.53355    
+pos_entry_mode18   -8.059e+00  3.247e+02  -0.025  0.98020    
+pos_entry_mode20   -6.594e+00  3.247e+02  -0.020  0.98380    
+pos_entry_mode21   -8.321e+00  2.261e+02  -0.037  0.97064    
+pos_entry_mode22   -7.824e+00  1.519e+02  -0.052  0.95892    
+pos_entry_mode90   -2.073e+00  2.126e-01  -9.750  < 2e-16 ***
+id_mcc              6.174e-05  3.068e-05   2.012  0.04417 *  
+is_upscale1        -1.865e-01  4.744e-02  -3.931 8.45e-05 ***
+mcc_groupA          1.212e+00  8.359e-02  14.501  < 2e-16 ***
+mcc_groupC          1.573e-01  1.589e-01   0.990  0.32222    
+mcc_groupD          2.315e-01  7.968e-02   2.906  0.00367 ** 
+mcc_groupE          3.512e-01  1.357e-01   2.588  0.00965 ** 
+mcc_groupF          8.910e-01  7.877e-02  11.311  < 2e-16 ***
+mcc_groupH          5.216e-02  1.700e-01   0.307  0.75891    
+mcc_groupL          4.157e-01  2.073e-01   2.005  0.04494 *  
+mcc_groupP         -5.113e+00  4.659e-01 -10.976  < 2e-16 ***
+mcc_groupR         -2.958e-02  1.385e-01  -0.214  0.83087    
+mcc_groupS          1.589e-01  1.542e-01   1.030  0.30285    
+mcc_groupT         -3.290e-01  1.209e-01  -2.721  0.00651 ** 
+mcc_groupV         -5.433e-01  2.635e-01  -2.062  0.03921 *  
+mcc_groupW          1.245e+00  1.012e-01  12.297  < 2e-16 ***
+mcc_groupX          7.512e-02  1.954e-01   0.384  0.70064    
+typeD              -7.663e-01  8.474e-02  -9.044  < 2e-16 ***
+cnt_1d             -3.291e-01  2.743e-02 -11.998  < 2e-16 ***
+sum_1d              1.231e-05  3.899e-05   0.316  0.75213    
+cnt_2d             -1.727e-02  2.046e-02  -0.844  0.39866    
+sum_2d              2.105e-05  2.460e-05   0.856  0.39226    
+cnt_7d             -5.076e-02  7.920e-03  -6.409 1.47e-10 ***
+sum_7d              4.903e-06  1.517e-05   0.323  0.74659    
+cnt_30d            -1.595e-03  2.006e-03  -0.795  0.42650    
+sum_30d            -1.143e-05  6.430e-06  -1.778  0.07541 .  
+frd_by_id_issuer   -6.974e+00  1.419e+00  -4.915 8.88e-07 ***
+frd_by_id_merchant  9.883e+00  1.030e-01  95.916  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 80988  on 366134  degrees of freedom
+Residual deviance: 31619  on 366084  degrees of freedom
+AIC: 31721
+
+Number of Fisher Scoring iterations: 11
+
+> 
+> #predict and performance measure
+> 
+> test.glm = predict(fit.glm_1, test)
+> 
+> test.glm = as.numeric(test.glm)-1
+> pred.glm = prediction(test.glm, as.numeric(test$is_fraud)-1)
+> performance(pred.glm, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.7812106
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> glm.frame = data.frame(test.glm)
+> glm.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(glm.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.665 
+
+        z = 268 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
+[1] 412802.6
+> 
+> #theoretical max savings
+> ComputeSavings(test$amount, as.numeric(test$is_fraud)-1, as.numeric(test$is_fraud)-1)
+[1] 561712.9
+> 
+> 
+> #logistic regression with Kappa as performance measure 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5)
+> 
+> fit.glm_1 <- train(is_fraud~.,data=train,
++                    method="glm",
++                    trControl=fitControl,
++                    metric = "Kappa")
+Warning messages:
+1: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+2: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+3: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+4: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+5: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+6: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+7: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+8: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+9: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+10: In predict.lm(object, newdata, se.fit, scale = 1, type = ifelse(type ==  :
+  prediction from a rank-deficient fit may be misleading
+> fit.glm_1
+Generalized Linear Model 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329521, 329521, 329522, 329523, 329521, 329522, ... 
+Resampling results:
+
+  Accuracy   Kappa    
+  0.9869147  0.6594687
+
+> summary(fit.glm_1)
+
+Call:
+NULL
+
+Deviance Residuals: 
+    Min       1Q   Median       3Q      Max  
+-3.6415  -0.1289  -0.0689  -0.0231   4.3721  
+
+Coefficients:
+                     Estimate Std. Error z value Pr(>|z|)    
+(Intercept)        -4.325e+01  2.870e+00 -15.067  < 2e-16 ***
+amount             -4.278e-05  5.347e-05  -0.800  0.42366    
+id_merchant        -5.480e-07  9.195e-08  -5.960 2.52e-09 ***
+datetime            2.908e-08  1.998e-09  14.557  < 2e-16 ***
+country_code        3.830e-04  1.275e-04   3.005  0.00266 ** 
+tokenized_pan       4.054e-10  2.941e-08   0.014  0.98900    
+amount_groupAX      2.421e-01  1.168e-01   2.074  0.03810 *  
+amount_groupBA     -1.873e+00  7.408e-02 -25.285  < 2e-16 ***
+amount_groupBM     -1.540e+00  6.395e-02 -24.076  < 2e-16 ***
+amount_groupMA     -6.786e-01  5.955e-02 -11.395  < 2e-16 ***
+amount_groupME     -1.181e+00  5.561e-02 -21.242  < 2e-16 ***
+amount_groupMI     -1.757e+00  6.732e-02 -26.097  < 2e-16 ***
+amount_groupMX     -2.659e-01  3.740e-01  -0.711  0.47710    
+pos_entry_mode1    -9.174e-01  2.206e-01  -4.160 3.19e-05 ***
+pos_entry_mode2    -4.776e+00  3.281e-01 -14.557  < 2e-16 ***
+pos_entry_mode5    -4.251e+00  3.086e-01 -13.773  < 2e-16 ***
+pos_entry_mode10   -6.511e-01  2.538e-01  -2.566  0.01030 *  
+pos_entry_mode11   -1.584e+00  4.656e+00  -0.340  0.73369    
+pos_entry_mode12   -1.830e-01  2.939e-01  -0.623  0.53355    
+pos_entry_mode18   -8.059e+00  3.247e+02  -0.025  0.98020    
+pos_entry_mode20   -6.594e+00  3.247e+02  -0.020  0.98380    
+pos_entry_mode21   -8.321e+00  2.261e+02  -0.037  0.97064    
+pos_entry_mode22   -7.824e+00  1.519e+02  -0.052  0.95892    
+pos_entry_mode90   -2.073e+00  2.126e-01  -9.750  < 2e-16 ***
+id_mcc              6.174e-05  3.068e-05   2.012  0.04417 *  
+is_upscale1        -1.865e-01  4.744e-02  -3.931 8.45e-05 ***
+mcc_groupA          1.212e+00  8.359e-02  14.501  < 2e-16 ***
+mcc_groupC          1.573e-01  1.589e-01   0.990  0.32222    
+mcc_groupD          2.315e-01  7.968e-02   2.906  0.00367 ** 
+mcc_groupE          3.512e-01  1.357e-01   2.588  0.00965 ** 
+mcc_groupF          8.910e-01  7.877e-02  11.311  < 2e-16 ***
+mcc_groupH          5.216e-02  1.700e-01   0.307  0.75891    
+mcc_groupL          4.157e-01  2.073e-01   2.005  0.04494 *  
+mcc_groupP         -5.113e+00  4.659e-01 -10.976  < 2e-16 ***
+mcc_groupR         -2.958e-02  1.385e-01  -0.214  0.83087    
+mcc_groupS          1.589e-01  1.542e-01   1.030  0.30285    
+mcc_groupT         -3.290e-01  1.209e-01  -2.721  0.00651 ** 
+mcc_groupV         -5.433e-01  2.635e-01  -2.062  0.03921 *  
+mcc_groupW          1.245e+00  1.012e-01  12.297  < 2e-16 ***
+mcc_groupX          7.512e-02  1.954e-01   0.384  0.70064    
+typeD              -7.663e-01  8.474e-02  -9.044  < 2e-16 ***
+cnt_1d             -3.291e-01  2.743e-02 -11.998  < 2e-16 ***
+sum_1d              1.231e-05  3.899e-05   0.316  0.75213    
+cnt_2d             -1.727e-02  2.046e-02  -0.844  0.39866    
+sum_2d              2.105e-05  2.460e-05   0.856  0.39226    
+cnt_7d             -5.076e-02  7.920e-03  -6.409 1.47e-10 ***
+sum_7d              4.903e-06  1.517e-05   0.323  0.74659    
+cnt_30d            -1.595e-03  2.006e-03  -0.795  0.42650    
+sum_30d            -1.143e-05  6.430e-06  -1.778  0.07541 .  
+frd_by_id_issuer   -6.974e+00  1.419e+00  -4.915 8.88e-07 ***
+frd_by_id_merchant  9.883e+00  1.030e-01  95.916  < 2e-16 ***
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+(Dispersion parameter for binomial family taken to be 1)
+
+    Null deviance: 80988  on 366134  degrees of freedom
+Residual deviance: 31619  on 366084  degrees of freedom
+AIC: 31721
+
+Number of Fisher Scoring iterations: 11
+
+> 
+> #predict and performance measure
+> 
+> test.glm = predict(fit.glm_1, test)
+> 
+> test.glm = as.numeric(test.glm)-1
+> pred.glm = prediction(test.glm, as.numeric(test$is_fraud)-1)
+> performance(pred.glm, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.7812106
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> glm.frame = data.frame(test.glm)
+> glm.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(glm.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.665 
+
+        z = 268 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount,test.glm, as.numeric(test$is_fraud)-1)
+[1] 412802.6
+> 
+> 
+> 
+> #decision tree with AUC as performance meaure--------------
+> 
+> tuneGrid <- expand.grid(cp = seq(0.0001,0.001, length.out = 10))
+> 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5, 
++                            classProbs = TRUE,
++                            summaryFunction = twoClassSummary)
+> 
+> fit.tree1 <- train(is_fraud~.,data=train,
++                    method="rpart",
++                    trControl=fitControl,
++                    tuneGrid = tuneGrid,
++                    metric = "ROC")
+> fit.tree1
+CART 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329521, 329521, 329522, 329521, 329521, 329522, ... 
+Resampling results across tuning parameters:
+
+  cp     ROC        Sens       Spec     
+  1e-04  0.9783602  0.9957954  0.6662691
+  2e-04  0.9800903  0.9963228  0.6581790
+  3e-04  0.9714973  0.9966455  0.6497136
+  4e-04  0.9436023  0.9969072  0.6351047
+  5e-04  0.9224871  0.9971259  0.6220436
+  6e-04  0.9183582  0.9971796  0.6144928
+  7e-04  0.9186007  0.9971908  0.6109520
+  8e-04  0.9188745  0.9972042  0.6068254
+  9e-04  0.9187856  0.9972064  0.6029330
+  1e-03  0.9189751  0.9972210  0.5977040
+
+ROC was used to select the optimal model using  the largest value.
+The final value used for the model was cp = 2e-04.
+> plot(fit.tree1)
+> 
+> 
+> #predict and performance measure
+> test.tree = predict(fit.tree1, test)
+> 
+> test.tree = as.numeric(test.tree)-1
+> pred.tree = prediction(test.tree, as.numeric(test$is_fraud)-1)
+> performance(pred.tree, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8223049
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> tree.frame = data.frame(test.tree)
+> tree.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(tree.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.711 
+
+        z = 283 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
+[1] 447750.5
+> 
+> 
+> #decision tree with Kappa as performance meaure--------------
+> 
+> tuneGrid <- expand.grid(cp = seq(0.0001,0.001, length.out = 10))
+> 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5)
+> 
+> fit.tree1 <- train(is_fraud~.,data=train,
++                    method="rpart",
++                    trControl=fitControl,
++                    tuneGrid = tuneGrid,
++                    metric = "Kappa")
+> fit.tree1
+CART 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329521, 329521, 329521, 329523, 329521, 329521, ... 
+Resampling results across tuning parameters:
+
+  cp     Accuracy   Kappa    
+  1e-04  0.9881481  0.7171073
+  2e-04  0.9884873  0.7203599
+  3e-04  0.9885376  0.7190576
+  4e-04  0.9884125  0.7117206
+  5e-04  0.9883349  0.7069456
+  6e-04  0.9881896  0.7015798
+  7e-04  0.9881175  0.6986582
+  8e-04  0.9879951  0.6949396
+  9e-04  0.9879585  0.6931357
+  1e-03  0.9878728  0.6900047
+
+Kappa was used to select the optimal model using  the largest value.
+The final value used for the model was cp = 2e-04.
+> plot(fit.tree1)
+> 
+> 
+> #predict and performance measure
+> test.tree = predict(fit.tree1, test)
+> 
+> test.tree = as.numeric(test.tree)-1
+> pred.tree = prediction(test.tree, as.numeric(test$is_fraud)-1)
+> performance(pred.tree, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8223049
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> tree.frame = data.frame(test.tree)
+> tree.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(tree.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.711 
+
+        z = 283 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount, test.tree, as.numeric(test$is_fraud)-1)
+[1] 447750.5
+> 
+> 
+> #random forest with AUC as performance measure-----------------
+> 
+> tuneGrid = expand.grid(.mtry = c(7,13))
+> 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5,
++                            classProbs = TRUE,
++                            summaryFunction = twoClassSummary)
+> 
+> rf_model<-train(is_fraud~.,data=train,
++                 method="rf",
++                 trControl=fitControl,
++                 tuneGrid = tuneGrid,
++                 ntree = 50,
++                 metric = "ROC")
+randomForest 4.6-12
+Type rfNews() to see new features/changes/bug fixes.
+
+Attaching package: ‘randomForest’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+The following object is masked from ‘package:ggplot2’:
+
+    margin
+
+> rf_model
+Random Forest 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329521, 329522, 329522, 329522, 329522, 329522, ... 
+Resampling results across tuning parameters:
+
+  mtry  ROC        Sens       Spec     
+   7    0.9850070  0.9983994  0.6869973
+  13    0.9862504  0.9982142  0.7142918
+
+ROC was used to select the optimal model using  the largest value.
+The final value used for the model was mtry = 13.
+> plot(rf_model)
+> 
+> 
+> ##predict and performance measure
+> test.forest = predict(rf_model, test)
+> 
+> test.forest = as.numeric(test.forest)-1
+> pred.forest = prediction(test.forest, as.numeric(test$is_fraud)-1)
+> performance(pred.forest, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8558681
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> forest.frame = data.frame(test.forest)
+> forest.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(forest.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.798 
+
+        z = 319 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount, test.forest, as.numeric(test$is_fraud)-1)
+[1] 481214.7
+> 
+> 
+> #random forest with Kappa as performance measure-----------------
+> 
+> tuneGrid = expand.grid(.mtry = 13)
+> 
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5)
+> 
+> rf_model<-train(is_fraud~.,data=train,
++                 method="rf",
++                 trControl=fitControl,
++                 tuneGrid = tuneGrid,
++                 ntree = 50,
++                 metric = "Kappa")
+randomForest 4.6-12
+Type rfNews() to see new features/changes/bug fixes.
+
+Attaching package: ‘randomForest’
+
+The following object is masked from ‘package:dplyr’:
+
+    combine
+
+The following object is masked from ‘package:ggplot2’:
+
+    margin
+
+> rf_model
+Random Forest 
+
+366135 samples
+    21 predictor
+     2 classes: 'no_fraud', 'fraud' 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329522, 329521, 329521, 329521, 329522, 329522, ... 
+Resampling results:
+
+  Accuracy   Kappa    
+  0.9916206  0.7946019
+
+Tuning parameter 'mtry' was held constant at a value of 13
+> 
+> 
+> 
+> ##predict and performance measure
+> test.forest = predict(rf_model, test)
+> 
+> test.forest = as.numeric(test.forest)-1
+> pred.forest = prediction(test.forest, as.numeric(test$is_fraud)-1)
+> performance(pred.forest, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8585127
+
+
+Slot "alpha.values":
+list()
+
+> 
+> 
+> forest.frame = data.frame(test.forest)
+> forest.frame$true = as.numeric(test$is_fraud)-1
+> kappa2(forest.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.799 
+
+        z = 319 
+  p-value = 0 
+> 
+> 
+> ComputeSavings(test$amount, test.forest, as.numeric(test$is_fraud)-1)
+[1] 475686.3
+> 
+> 
+> #XGBoost tree-------
+> dataset <- read_csv("dataset_agg.csv", 
++                     col_types = cols(datetime = col_datetime(format = "%Y-%m-%d %H:%M:%S")))
+> #split dataset
+> set.seed(5)
+> sample = sample.split(dataset$is_fraud, SplitRatio = .7)
+> train = subset(dataset, sample == TRUE)
+> test  = subset(dataset, sample == FALSE)
+> 
+> 
+> #data preprocessing for XGBoost
+> train = data.frame(train)
+> is_fraud = as.factor(train$is_fraud)
+> levels(is_fraud) <- c("no_fraud", "fraud")
+> 
+> train = subset(train, select = -c(id_issuer, is_fraud))
+> train$amount_group = as.numeric(as.factor(train$amount_group))
+> train$pos_entry_mode = as.numeric(as.factor(train$pos_entry_mode))
+> train$is_upscale = as.numeric(as.factor(train$is_upscale))
+> train$mcc_group = as.numeric(as.factor(train$mcc_group))
+> train$type = as.factor(train$type)
+> train$type = as.numeric(train$type)-1
+> train$datetime = as.numeric(as.POSIXct(train$datetime))
+> 
+> train_m = as.matrix(train)
+> train_m = as(train_m, "dgCMatrix")
+> 
+> 
+> test = data.frame(test)
+> trueval <- as.numeric(test$is_fraud)
+> test = subset(test, select = -c(id_issuer, is_fraud))
+> test$amount_group = as.numeric(as.factor(test$amount_group))
+> test$pos_entry_mode = as.numeric(as.factor(test$pos_entry_mode))
+> test$is_upscale = as.numeric(as.factor(test$is_upscale))
+> test$mcc_group = as.numeric(as.factor(test$mcc_group))
+> test$type = as.factor(test$type)
+> test$type = as.numeric(test$type)-1
+> test$datetime = as.numeric(as.POSIXct(test$datetime))
+> 
+> 
+> test_m = as.matrix(test)
+> test_m = as(test_m, "dgCMatrix")
+> 
+#XGBoost with AUC as performance measure
+> tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
++                        max_depth = c(7,20),       # Max Tree Depth
++                        eta = 0.3,                     # Shrinkage
++                        gamma = 0,             # Minimum Loss Reduction
++                        colsample_bytree = 1,   # Subsample Ratio of Columns
++                        min_child_weight = 1,     # Minimum Sum of Instance Weight
++                        subsample = 1)                # Subsample Percentage
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5, 
++                            classProbs = TRUE,
++                            summaryFunction = twoClassSummary,
++                            allowParallel = TRUE,
++                            verboseIter = TRUE)
+> xgboost_1<-train(x = train_m,
++                 y = is_fraud,
++                 method="xgbTree",
++                 trControl=fitControl,
++                 tuneGrid = tuneGrid,
++                 ntree = 50,
++                 metric = "ROC",
++                 max_delta_step = 1,
++                 scale_pos_weight = 42,
++                 objective = "binary:logistic")
+Aggregating results
+Selecting tuning parameters
+Fitting nrounds = 100, max_depth = 20, eta = 0.3, gamma = 0, colsample_bytree = 1, min_child_weight = 1, subsample = 1 on full training set
+> xgboost_1
+eXtreme Gradient Boosting 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329521, 329522, 329521, 329522, 329523, 329521, ... 
+Resampling results across tuning parameters:
+
+  max_depth  ROC        Sens       Spec     
+   7         0.9937137  0.9997617  0.4858015
+  20         0.9948765  0.9992595  0.6959541
+
+Tuning parameter 'nrounds' was held constant at a value of 100
+Tuning parameter 'eta' was held constant at
+ parameter 'colsample_bytree' was held constant at a value of 1
+Tuning parameter 'min_child_weight' was
+ held constant at a value of 1
+Tuning parameter 'subsample' was held constant at a value of 1
+ROC was used to select the optimal model using  the largest value.
+The final values used for the model were nrounds = 100, max_depth = 20, eta = 0.3, gamma =
+ 0, colsample_bytree = 1, min_child_weight = 1 and subsample = 1.
+
+##predict and performance measure
+> test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict probabiloties
+> test.xgboost = as.numeric(test.xgboost>0.5)
+> pred.xgboost = prediction(test.xgboost, trueval)
+> performance(pred.xgboost, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8478563
+
+
+Slot "alpha.values":
+list()
+
+> xgboost.frame = data.frame(test.xgboost)
+> xgboost.frame$true = as.numeric(trueval)
+> kappa2(xgboost.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.805 
+
+        z = 323 
+  p-value = 0 
+> ComputeSavings(test$amount, test.xgboost, trueval)
+[1] 474032.5
+
+#XGBoost with Kappa as performance measure
+> tuneGrid = expand.grid(nrounds = 100,               # # Boosting Iterations
++                        max_depth = 20,       # Max Tree Depth
++                        eta = 0.3,                     # Shrinkage
++                        gamma = 0,             # Minimum Loss Reduction
++                        colsample_bytree = 1,   # Subsample Ratio of Columns
++                        min_child_weight = 1,     # Minimum Sum of Instance Weight
++                        subsample = 1)                 # Subsample Percentage
+> fitControl <- trainControl(method="repeatedcv",
++                            number=10, 
++                            repeats=5,
++                            allowParallel = TRUE,
++                            verboseIter = TRUE)
+> xgboost_1<-train(x = train_m,
++                  y = is_fraud,
++                  method="xgbTree",
++                  trControl=fitControl,
++                  tuneGrid = tuneGrid,
++                  ntree = 50,
++                  metric = "Kappa",
++                  max_delta_step = 1,
++                  scale_pos_weight = 42,
++                  objective = "binary:logistic")
+
+Attaching package: ‘xgboost’
+
+The following object is masked from ‘package:dplyr’:
+
+    slice
+> xgboost_1
+eXtreme Gradient Boosting 
+
+No pre-processing
+Resampling: Cross-Validated (10 fold, repeated 5 times) 
+Summary of sample sizes: 329522, 329521, 329522, 329521, 329521, 329522, ... 
+Resampling results:
+
+  Accuracy   Kappa    
+  0.9921756  0.8016512
+
+Tuning parameter 'nrounds' was held constant at a value of 100
+Tuning parameter 'max_depth' was held
+ of 1
+Tuning parameter 'min_child_weight' was held constant at a value of 1
+Tuning parameter 'subsample'
+ was held constant at a value of 1
+
+##predict and performance measure
+> test.xgboost = predict(xgboost_1, test_m, type = "prob")[,2]#first predict probabiloties
+> test.xgboost = as.numeric(test.xgboost>0.5)
+> pred.xgboost = prediction(test.xgboost, trueval)
+> performance(pred.xgboost, "auc")
+An object of class "performance"
+Slot "x.name":
+[1] "None"
+
+Slot "y.name":
+[1] "Area under the ROC curve"
+
+Slot "alpha.name":
+[1] "none"
+
+Slot "x.values":
+list()
+
+Slot "y.values":
+[[1]]
+[1] 0.8478563
+
+
+Slot "alpha.values":
+list()
+
+> xgboost.frame = data.frame(test.xgboost)
+> xgboost.frame$true = as.numeric(trueval)
+> kappa2(xgboost.frame)
+ Cohen's Kappa for 2 Raters (Weights: unweighted)
+
+ Subjects = 156914 
+   Raters = 2 
+    Kappa = 0.805 
+
+        z = 323 
+  p-value = 0 
+> ComputeSavings(test$amount, test.xgboost, trueval)
+[1] 474032.5
+
